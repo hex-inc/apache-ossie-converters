@@ -43,7 +43,8 @@ def convert_ossie_to_hex(
         - `input`: A path to the Ossie document file.
         - `output`: Optional. A path to the desired output directory. If not provided,
           the output is not written to a file.
-        - `dialect`: Optional. An Ossie expression dialect to prefer, defaulting to `ANSI_SQL`.
+        - `dialect`: Optional. An Ossie expression dialect to prefer, defaulting to
+          `OSSIE_SQL_2026`.
           If unavailable, select `ANSI_SQL`, then the first variant in source order.
           Only the selected variant is validated and preserved in Hex expressions.
 

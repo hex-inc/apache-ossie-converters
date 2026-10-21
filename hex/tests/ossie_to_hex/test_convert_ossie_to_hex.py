@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 from inline_snapshot import snapshot
 
-from ossie_hex.hex import HexModel
+from ossie_hex.hex import HexDialect, HexModel
 from ossie_hex.ossie_to_hex.convert_ossie_to_hex import convert_ossie_to_hex
 from ossie_hex.util.yaml import dump_yaml
 from tests.ossie_to_hex.utils import Quick
@@ -97,7 +97,7 @@ Cause: []""")
     assert not output.parent.exists()
 
 
-@pytest.mark.parametrize("dialect", [None, "ANSI_SQL", "SNOWFLAKE"])
+@pytest.mark.parametrize("dialect", [None, "OSSIE_SQL_2026", "ANSI_SQL", "SNOWFLAKE"])
 def test_selected_dialect_is_used_when_loading_and_converting(
     tmp_path: Path, dialect: str | None
 ) -> None:
@@ -112,6 +112,7 @@ def test_selected_dialect_is_used_when_loading_and_converting(
                     ("DAX", "IF(bar[amount] > 0, bar[amount], 0)"),
                     ("ANSI_SQL", "CASE WHEN amount > 0 THEN amount ELSE 0 END"),
                     ("SNOWFLAKE", "IFF(amount > 0, amount, 0)"),
+                    ("OSSIE_SQL_2026", "ABS(amount)"),
                 ],
             )
         ],
@@ -126,6 +127,7 @@ def test_selected_dialect_is_used_when_loading_and_converting(
                 "SUM(CASE WHEN bar.amount > 0 THEN bar.amount ELSE 0 END)",
             ),
             ("SNOWFLAKE", "SUM(IFF(bar.amount > 0, bar.amount, 0))"),
+            ("OSSIE_SQL_2026", "SUM(ABS(bar.amount))"),
         ],
     )
     semantic_model = Quick.semantic_model("foo", [dataset], [metric], [])
@@ -140,7 +142,10 @@ def test_selected_dialect_is_used_when_loading_and_converting(
     model = project.resources[0]
     assert isinstance(model, HexModel)
     expressions = (model.dimensions[0].expr_sql, model.measures[0].func_sql)
-    if dialect == "SNOWFLAKE":
+    if dialect in (None, "OSSIE_SQL_2026"):
+        assert project.dialect == HexDialect("snowflake")
+        assert expressions == snapshot(("ABS(amount)", "SUM(ABS(${amount}))"))
+    elif dialect == "SNOWFLAKE":
         assert expressions == snapshot(
             ("IFF(amount > 0, amount, 0)", "SUM(IFF(${amount} > 0, ${amount}, 0))")
         )
@@ -153,7 +158,7 @@ def test_selected_dialect_is_used_when_loading_and_converting(
         )
     if dialect is None:
         assert problems_snapshot(problems) == snapshot(
-            "[INFO] No Ossie dialect specified; using ANSI_SQL"
+            "[INFO] No Ossie dialect specified; using OSSIE_SQL_2026"
         )
     else:
         assert problems_snapshot(problems) == snapshot("")
@@ -168,7 +173,7 @@ def test_convert_tpcds() -> None:
     assert hex_project is not None
     assert hex_project_snapshot(hex_project) == snapshot("""\
 name: tpcds_retail_model
-dialect: duckdb
+dialect: snowflake
 resources:
 - id: store_sales
   description: Fact table containing all store sales transactions
@@ -369,14 +374,131 @@ resources:
     expr_sql: s_number_employees
 """)
     assert problems_snapshot(problems, include_causes=True) == snapshot("""\
-[INFO] No Ossie dialect specified; using ANSI_SQL
+[INFO] No Ossie dialect specified; using OSSIE_SQL_2026
 Cause: []
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_sold_date_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_item_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_customer_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_store_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_quantity', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_sales_price', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_ext_sales_price', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store_sales', 'fields', 'ss_net_profit', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'date_dim', 'fields', 'd_date_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'date_dim', 'fields', 'd_date', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'date_dim', 'fields', 'd_year', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'date_dim', 'fields', 'd_quarter_name', 'expression', 'dialects']
 
 [WARNING] Missing. Hex requires a datatype. Using default 'String'.
 Cause: ['datasets', 'date_dim', 'fields', 'd_quarter_name', 'datatype']
 
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'date_dim', 'fields', 'd_moy', 'expression', 'dialects']
+
 [WARNING] Missing. Hex requires a datatype. Using default 'String'.
 Cause: ['datasets', 'date_dim', 'fields', 'd_moy', 'datatype']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'c_customer_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'c_customer_id', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'c_first_name', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'c_last_name', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'customer_full_name', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'customer', 'fields', 'c_email_address', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_item_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_item_id', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_item_desc', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_brand', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_category', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'item', 'fields', 'i_current_price', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_store_sk', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_store_id', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_store_name', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_city', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_state', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['datasets', 'store', 'fields', 's_number_employees', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'total_sales', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'total_profit', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'customer_lifetime_value', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'sales_by_brand', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'store_productivity', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'cumulative_sales', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'brand_rank_in_store', 'expression', 'dialects']
+
+[WARNING] Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
+Cause: ['metrics', 'monthly_sales_change', 'expression', 'dialects']
 
 [WARNING] Composite primary key is not supported: ['ss_item_sk', 'ss_ticket_number']
 Cause: ['datasets', 'store_sales', 'primary_key']

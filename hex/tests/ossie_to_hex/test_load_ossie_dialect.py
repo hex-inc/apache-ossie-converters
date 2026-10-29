@@ -55,15 +55,15 @@ def test_parses_lowercase_string(
 def test_warns_and_defaults_for_invalid_string(ctx: ExportContext) -> None:
     ossie_dialect = "not_a_dialect"
     result = load_ossie_dialect(ossie_dialect, ctx=ctx)
-    assert result is OssieDialect.ANSI_SQL
+    assert result is OssieDialect.OSSIE_SQL_2026
     assert problems_snapshot(ctx.problems) == snapshot(
-        "[WARNING] Invalid Ossie dialect: not_a_dialect. Using ANSI_SQL instead."
+        "[WARNING] Invalid Ossie dialect: not_a_dialect. Using OSSIE_SQL_2026 instead."
     )
 
 
 def test_defaults_when_missing(ctx: ExportContext) -> None:
     result = load_ossie_dialect(None, ctx=ctx)
-    assert result is OssieDialect.ANSI_SQL
+    assert result is OssieDialect.OSSIE_SQL_2026
     assert problems_snapshot(ctx.problems) == snapshot(
-        "[INFO] No Ossie dialect specified; using ANSI_SQL"
+        "[INFO] No Ossie dialect specified; using OSSIE_SQL_2026"
     )

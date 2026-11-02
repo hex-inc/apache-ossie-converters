@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from ossie import OssieDialect, OssieDialectExpression
+from ossie import OssieDialectExpression
 
 from .context import ExportContext
 
@@ -25,26 +25,39 @@ def pick_ossie_dialect_expression(
     *,
     ctx: ExportContext,
 ) -> OssieDialectExpression | None:
-    """Pick an Ossie dialect expression from a list of Ossie dialect expressions.
-
-    Prefers to pick the current dialect, then falls back to ANSI SQL, then the first in the list.
-
-    Returns a dialect expression or None if no fallback is found.
-    """
-    fallback: OssieDialectExpression | None = None
-    for entry in ossie_dialect_expressions:
-        if entry.dialect == ctx.ossie_dialect:
-            return entry
-        # fallback preference: (1) ansi sql, (2) first in the list
-        elif entry.dialect == OssieDialect.ANSI_SQL or fallback is None:
-            fallback = entry
-    if ctx.current_phase_name == "load":
-        if fallback is not None:
-            ctx.warn(
-                f"Preferred dialect {ctx.ossie_dialect} not found for expression; using fallback dialect {fallback.dialect}"
-            )
+    """Use a sole variant, or resolve multiple variants with an explicit preference."""
+    if len(ossie_dialect_expressions) == 1:
+        choice = ossie_dialect_expressions[0]
+    else:
+        matches = [
+            entry
+            for entry in ossie_dialect_expressions
+            if entry.dialect == ctx.ossie_dialect
+        ]
+        if len(matches) == 1:
+            choice = matches[0]
         else:
-            ctx.error(
-                f"Preferred dialect {ctx.ossie_dialect} not found for expression and no fallback dialect found"
-            )
-    return fallback
+            if ctx.current_phase_name == "load":
+                available = ", ".join(
+                    entry.dialect.value for entry in ossie_dialect_expressions
+                )
+                if not ossie_dialect_expressions:
+                    ctx.error("Expression has no dialect variants.")
+                elif ctx.ossie_dialect is None:
+                    ctx.error(
+                        f"Expression has multiple dialect variants: {available}. "
+                        "Select one with --dialect."
+                    )
+                elif not matches:
+                    ctx.error(
+                        f"Expression has no {ctx.ossie_dialect.value} variant. "
+                        f"Available dialects: {available}. Select one with --dialect."
+                    )
+                else:
+                    ctx.error(
+                        f"Expression has multiple {ctx.ossie_dialect.value} variants; "
+                        "provide exactly one variant for the selected dialect."
+                    )
+            return None
+    ctx.selected_ossie_dialects.add(choice.dialect)
+    return choice

@@ -24,8 +24,8 @@ from .context import ExportContext
 
 _DIALECT_NAME_MAP: Mapping[OssieDialect, HexDialectName | None] = {
     OssieDialect.ANSI_SQL: "duckdb",
-    # Match the Snowflake approximation used to parse portable Ossie SQL.
-    OssieDialect.OSSIE_SQL_2026: "snowflake",
+    # Portable dialects use the project default independently of their parser.
+    OssieDialect.OSSIE_SQL_2026: "duckdb",
     OssieDialect.BIGQUERY: "bigquery",
     OssieDialect.DATABRICKS: "databricks",
     OssieDialect.SNOWFLAKE: "snowflake",
@@ -52,3 +52,24 @@ def convert_ossie_dialect(
         )
         return HexDialect("duckdb")
     return HexDialect(hex_dialect_name)
+
+
+def infer_hex_dialect(*, ctx: ExportContext) -> HexDialect | None:
+    """Infer one project engine from selected variants, allowing portable SQL alongside it."""
+    selected = ctx.selected_ossie_dialects
+    portable = {OssieDialect.ANSI_SQL, OssieDialect.OSSIE_SQL_2026}
+    vendor_dialects = sorted(selected - portable, key=lambda dialect: dialect.value)
+    if vendor_dialects:
+        engines = [
+            convert_ossie_dialect(dialect, ctx=ctx) for dialect in vendor_dialects
+        ]
+        if any(engine != engines[0] for engine in engines[1:]):
+            available = ", ".join(dialect.value for dialect in vendor_dialects)
+            ctx.error(
+                f"Selected expressions use incompatible dialects: {available}. "
+                "A Hex project must use one SQL dialect."
+            )
+            return None
+        return engines[0]
+    # Portable expressions do not identify a target engine.
+    return HexDialect("duckdb")

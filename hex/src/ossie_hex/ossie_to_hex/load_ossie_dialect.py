@@ -37,12 +37,12 @@ def load_ossie_dialect(
             return OssieDialect(value)
         except ValueError:
             ctx.warn(
-                message=f"Invalid Ossie dialect: {ossie_dialect}. Using ANSI_SQL instead.",
+                message=f"Invalid Ossie dialect: {ossie_dialect}. Using OSSIE_SQL_2026 instead.",
             )
-            return OssieDialect.ANSI_SQL
+            return OssieDialect.OSSIE_SQL_2026
     else:
         ctx.info(
-            "No Ossie dialect specified; using ANSI_SQL",
+            "No Ossie dialect specified; using OSSIE_SQL_2026",
             code="missing-dialect",
         )
-        return OssieDialect.ANSI_SQL
+        return OssieDialect.OSSIE_SQL_2026

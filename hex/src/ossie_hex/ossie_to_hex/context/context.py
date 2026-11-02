@@ -38,7 +38,8 @@ class ExportContext(Context[ExportProblemCode]):
     """Context for exporting from Ossie specification to Hex specification."""
 
     # global scope
-    ossie_dialect: OssieDialect
+    ossie_dialect: OssieDialect | None
+    selected_ossie_dialects: set[OssieDialect]
     hex_dialect: HexDialect
 
     # conversion state
@@ -53,12 +54,14 @@ class ExportContext(Context[ExportProblemCode]):
 
     def __init__(self) -> None:
         super().__init__(logger=logger)
+        self.ossie_dialect = None
+        self.selected_ossie_dialects = set()
         self._hex_ids = ExportHexIds()
         self._analysis = ExportAnalysis()
         self._assignment = ExportAssignment()
         self._hex_models = {}
 
-    def set_ossie_dialect(self, ossie_dialect: OssieDialect) -> None:
+    def set_ossie_dialect(self, ossie_dialect: OssieDialect | None) -> None:
         self.ossie_dialect = ossie_dialect
 
     def set_hex_dialect(self, hex_dialect: HexDialect) -> None:

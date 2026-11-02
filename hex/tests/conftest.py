@@ -41,3 +41,46 @@ def minimal_ossie_input(tmp_path: Path) -> Path:
     )
     path.write_text(data, encoding="utf-8")
     return path
+
+
+@pytest.fixture
+def mixed_dialect_input(tmp_path: Path) -> Path:
+    path = tmp_path / "mixed.yml"
+    path.write_text(
+        dedent(
+            """\
+            name: mixed
+            datasets:
+              - name: orders
+                source: public.orders
+                fields:
+                  - name: id
+                    datatype: Integer
+                    expression:
+                      dialects:
+                        - dialect: ANSI_SQL
+                          expression: id
+                  - name: amount
+                    datatype: Integer
+                    expression:
+                      dialects:
+                        - dialect: OSSIE_SQL_2026
+                          expression: amount
+                  - name: positive_amount
+                    datatype: Integer
+                    expression:
+                      dialects:
+                        - dialect: SNOWFLAKE
+                          expression: IFF(amount > 0, amount, 0)
+            metrics:
+              - name: total
+                datatype: Integer
+                expression:
+                  dialects:
+                    - dialect: SNOWFLAKE
+                      expression: SUM(IFF(orders.amount > 0, orders.amount, 0))
+            """
+        ),
+        encoding="utf-8",
+    )
+    return path

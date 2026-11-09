@@ -22,7 +22,7 @@ from ossie import OssieSemanticModel
 
 from ossie_hex.ossie_to_hex.context import (
     ExportContext,
-    MetricAssignment,
+    ModelMetricAssignment,
     RelationshipAssignment,
 )
 from ossie_hex.ossie_to_hex.convert_ossie_namespace import (
@@ -90,7 +90,7 @@ def test_initialize_stores_provisional_member_ids(ctx: ExportContext) -> None:
         == ctx.hex_ids.fields[("orders", "Amount")]
         == "amount"
     )
-    assert ctx.hex_ids.metrics == {"Amount": "amount"}
+    assert ctx.hex_ids.model_metrics == {"Amount": "amount"}
     assert ctx.hex_ids.relationships == {"Amount": "amount"}
 
 
@@ -181,14 +181,14 @@ def test_finalize_resolves_collisions_across_member_groups(ctx: ExportContext) -
         relationships=[ORDERS_CUSTOMERS.model_copy(update={"name": "Amount"})],
     )
     initialize_ossie_namespace(source, ctx=ctx)
-    ctx.assignment.set_for_metric(MetricAssignment("amount", "orders", None))
+    ctx.assignment.set_for_model_metric(ModelMetricAssignment("amount", "orders", None))
     ctx.assignment.set_for_relationship(
         RelationshipAssignment("Amount", "from_to", "orders", "customers")
     )
 
     finalize_ossie_namespace(source, ctx=ctx)
 
-    assert ctx.hex_ids.for_metric("amount") == "amount"
+    assert ctx.hex_ids.for_model_metric("amount") == "amount"
     assert ctx.hex_ids.for_field("orders", "Amount") == "amount_2"
     assert ctx.hex_ids.for_relationship("Amount") == "amount_3"
 
@@ -200,12 +200,14 @@ def test_finalize_allows_same_member_id_in_different_models(ctx: ExportContext) 
         metrics=[TOTAL.model_copy(update={"name": "Total"}), TOTAL],
     )
     initialize_ossie_namespace(source, ctx=ctx)
-    ctx.assignment.set_for_metric(MetricAssignment("Total", "orders", None))
-    ctx.assignment.set_for_metric(MetricAssignment("total", "customers", None))
+    ctx.assignment.set_for_model_metric(ModelMetricAssignment("Total", "orders", None))
+    ctx.assignment.set_for_model_metric(
+        ModelMetricAssignment("total", "customers", None)
+    )
 
     finalize_ossie_namespace(source, ctx=ctx)
 
-    assert ctx.hex_ids.metrics == {"Total": "total", "total": "total"}
+    assert ctx.hex_ids.model_metrics == {"Total": "total", "total": "total"}
 
 
 def test_finalize_avoids_collisions_in_every_relationship_placement(
@@ -247,7 +249,7 @@ def test_finalize_retains_ids_for_unassigned_members(ctx: ExportContext) -> None
 
     finalize_ossie_namespace(source, ctx=ctx)
 
-    assert ctx.hex_ids.metrics == {"amount": "amount"}
+    assert ctx.hex_ids.model_metrics == {"amount": "amount"}
     assert ctx.hex_ids.relationships == {"amount": "amount"}
 
 
@@ -338,7 +340,7 @@ def test_initialize_reports_duplicates_and_keeps_their_mappings(
     assert (
         ctx.hex_ids.for_dataset("dupe"),
         ctx.hex_ids.for_field("orders", "dupe"),
-        ctx.hex_ids.for_metric("dupe"),
+        ctx.hex_ids.for_model_metric("dupe"),
         ctx.hex_ids.for_relationship("dupe"),
     ) == ("dupe",) * 4
     assert [p.code for p in ctx.problems] == ["duplicate-name"] * 4

@@ -17,8 +17,8 @@
 
 from .context import (
     ExportContext,
-    MetricAnalysis,
-    MetricAssignment,
+    ModelMetricAnalysis,
+    ModelMetricAssignment,
     RelationshipAssignment,
 )
 
@@ -26,12 +26,12 @@ from .context import (
 def build_assignments(*, ctx: ExportContext) -> None:
     """Choose metric parents and every relationship direction to emit."""
 
-    for metric_analysis in ctx.analysis.for_metrics():
-        assignment = _assign_metric(metric_analysis, ctx=ctx)
-        if assignment is None:
+    for model_metric_analysis in ctx.analysis.for_model_metrics():
+        assignments = _assign_model_metric(model_metric_analysis, ctx=ctx)
+        if assignments is None:
             continue
-        metric_assignment, relationship_assignment = assignment
-        ctx.assignment.set_for_metric(metric_assignment)
+        model_metric_assignment, relationship_assignment = assignments
+        ctx.assignment.set_for_model_metric(model_metric_assignment)
         ctx.assignment.set_for_relationship(relationship_assignment)
 
     for relationship_analysis in ctx.analysis.for_relationships():
@@ -51,21 +51,21 @@ def build_assignments(*, ctx: ExportContext) -> None:
         ctx.assignment.set_for_relationship(relationship_assignment)
 
 
-def _assign_metric(
-    analysis: MetricAnalysis,
+def _assign_model_metric(
+    analysis: ModelMetricAnalysis,
     *,
     ctx: ExportContext,
-) -> tuple[MetricAssignment, RelationshipAssignment | None] | None:
+) -> tuple[ModelMetricAssignment, RelationshipAssignment | None] | None:
     if len(analysis.dataset_names) == 0:
         return None
     elif len(analysis.dataset_names) == 1:
         relationship_assignment = None
-        metric_assignment = MetricAssignment(
+        model_metric_assignment = ModelMetricAssignment(
             name=analysis.name,
             source=analysis.dataset_names[0],
             relationship=relationship_assignment,
         )
-        return metric_assignment, relationship_assignment
+        return model_metric_assignment, relationship_assignment
     elif len(analysis.dataset_names) == 2:
         eligible_relationship_names: set[str] = set()
         eligible_relationship_assignments: list[RelationshipAssignment] = []
@@ -119,12 +119,12 @@ def _assign_metric(
                 eligible_relationship_assignments[0],
             )
 
-        metric_assignment = MetricAssignment(
+        model_metric_assignment = ModelMetricAssignment(
             name=analysis.name,
             source=relationship_assignment.source,
             relationship=relationship_assignment,
         )
-        return metric_assignment, relationship_assignment
+        return model_metric_assignment, relationship_assignment
     elif len(analysis.dataset_names) > 2:
         return None
 

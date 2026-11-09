@@ -21,8 +21,8 @@ from inline_snapshot import snapshot
 from ossie_hex.ossie_to_hex.build_assignments import build_assignments
 from ossie_hex.ossie_to_hex.context import (
     ExportContext,
-    MetricAnalysis,
-    MetricAssignment,
+    ModelMetricAnalysis,
+    ModelMetricAssignment,
     RelationshipAnalysis,
     RelationshipAnalysisEdge,
     RelationshipAssignment,
@@ -34,10 +34,10 @@ from tests.utils import problems_snapshot
 @pytest.fixture
 def ctx() -> ExportContext:
     ctx = ExportContext()
-    analysis = MetricAnalysis(
+    analysis = ModelMetricAnalysis(
         "foo", parse_one("bar.qux + baz.qoz"), None, ("bar", "baz")
     )
-    ctx.analysis.set_for_metric(analysis.name, analysis)
+    ctx.analysis.set_for_model_metric(analysis.name, analysis)
     return ctx
 
 
@@ -52,7 +52,7 @@ def test_assigns_metric_with_only_reverse_edge(ctx: ExportContext) -> None:
     build_assignments(ctx=ctx)
 
     relationship = RelationshipAssignment("relation", "to_from", "baz", "bar")
-    assert ctx.assignment.for_metric("foo") == MetricAssignment(
+    assert ctx.assignment.for_model_metric("foo") == ModelMetricAssignment(
         "foo", "baz", relationship
     )
     assert ctx.assignment.for_relationship("relation") == [relationship]
@@ -62,7 +62,7 @@ def test_assigns_metric_with_only_reverse_edge(ctx: ExportContext) -> None:
 def test_reports_missing_relationship(ctx: ExportContext) -> None:
     build_assignments(ctx=ctx)
 
-    assert ctx.assignment.for_metric("foo") is None
+    assert ctx.assignment.for_model_metric("foo") is None
     assert problems_snapshot(ctx.problems, include_causes=True) == snapshot("""\
 [ERROR] Cannot assign metric. Unable to find a relationship between referenced datasets: bar, baz.
 Cause: ['metrics', 'foo']""")
@@ -83,7 +83,7 @@ def test_warns_about_ambiguity_and_prefers_forward_edge(ctx: ExportContext) -> N
     build_assignments(ctx=ctx)
 
     relationship = RelationshipAssignment("forward", "from_to", "bar", "baz")
-    assert ctx.assignment.for_metric("foo") == MetricAssignment(
+    assert ctx.assignment.for_model_metric("foo") == ModelMetricAssignment(
         "foo", "bar", relationship
     )
     assert ctx.assignment.for_relationship("forward") == [relationship]
@@ -93,10 +93,10 @@ Cause: ['metrics', 'foo']""")
 
 
 def test_assigns_multiple_metrics_using_same_relationship(ctx: ExportContext) -> None:
-    analysis = MetricAnalysis(
+    analysis = ModelMetricAnalysis(
         "second", parse_one("bar.qux - baz.qoz"), None, ("bar", "baz")
     )
-    ctx.analysis.set_for_metric(analysis.name, analysis)
+    ctx.analysis.set_for_model_metric(analysis.name, analysis)
     ctx.analysis.set_for_relationship(
         RelationshipAnalysis(
             "relation",
@@ -111,7 +111,7 @@ def test_assigns_multiple_metrics_using_same_relationship(ctx: ExportContext) ->
 
     relationship = RelationshipAssignment("relation", "from_to", "bar", "baz")
     for name in ("foo", "second"):
-        assert ctx.assignment.for_metric(name) == MetricAssignment(
+        assert ctx.assignment.for_model_metric(name) == ModelMetricAssignment(
             name, "bar", relationship
         )
     assert ctx.assignment.for_relationship("relation") == [relationship]

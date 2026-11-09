@@ -23,10 +23,10 @@ from ..hex import HexProject, HexResource
 from .build_assignments import build_assignments
 from .context import ExportContext
 from .convert_ossie_dataset import convert_ossie_dataset
-from .convert_ossie_metric import (
-    analyze_ossie_metric,
-    assign_ossie_metric,
-    convert_ossie_metric,
+from .convert_ossie_model_metric import (
+    analyze_ossie_model_metric,
+    assign_ossie_model_metric,
+    convert_ossie_model_metric,
 )
 from .convert_ossie_namespace import (
     finalize_ossie_namespace,
@@ -73,8 +73,8 @@ def convert_ossie_semantic_model(
 
     with ctx.problem_scope("metrics"):
         for ossie_metric in ossie_semantic_model.metrics or []:
-            analysis = analyze_ossie_metric(ossie_metric, ctx=ctx)
-            ctx.analysis.set_for_metric(ossie_metric.name, analysis)
+            analysis = analyze_ossie_model_metric(ossie_metric, ctx=ctx)
+            ctx.analysis.set_for_model_metric(ossie_metric.name, analysis)
 
     build_assignments(ctx=ctx)
 
@@ -92,8 +92,8 @@ def convert_ossie_semantic_model(
 
     with ctx.problem_scope("metrics"):
         for ossie_metric in ossie_semantic_model.metrics or []:
-            conversion = convert_ossie_metric(ossie_metric, ctx=ctx)
-            assign_ossie_metric(ossie_metric, conversion, ctx=ctx)
+            conversion = convert_ossie_model_metric(ossie_metric, ctx=ctx)
+            assign_ossie_model_metric(ossie_metric, conversion, ctx=ctx)
 
     with ctx.problem_scope("description"):
         if ossie_semantic_model.description is not None:

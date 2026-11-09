@@ -26,11 +26,11 @@ class ExportAssignment:
     """Store placements chosen by the assignment planner."""
 
     def __init__(self) -> None:
-        self._metric_assignments: dict[str, MetricAssignment] = {}
+        self._model_metric_assignments: dict[str, ModelMetricAssignment] = {}
         self._relationship_assignments: dict[str, list[RelationshipAssignment]] = {}
 
-    def for_metric(self, name: str) -> MetricAssignment | None:
-        return self._metric_assignments.get(name)
+    def for_model_metric(self, name: str) -> ModelMetricAssignment | None:
+        return self._model_metric_assignments.get(name)
 
     def for_relationship(self, name: str) -> list[RelationshipAssignment]:
         return self._relationship_assignments.get(name, [])
@@ -40,20 +40,20 @@ class ExportAssignment:
             return
         self._relationship_assignments[assignment.name] = [assignment]
 
-    def set_for_metric(self, assignment: MetricAssignment) -> None:
-        self._metric_assignments[assignment.name] = assignment
+    def set_for_model_metric(self, assignment: ModelMetricAssignment) -> None:
+        self._model_metric_assignments[assignment.name] = assignment
 
 
 @dataclass(frozen=True)
-class MetricAssignment:
-    """The assignment of a metric to a parent dataset and optional relationship."""
+class ModelMetricAssignment:
+    """The assignment of a model-scoped metric to a parent dataset and optional relationship."""
 
     name: str
-    """The name of the Ossie metric."""
+    """The name of the Ossie model-scoped metric."""
     source: str
-    """The name of the Ossie dataset that should be the parent of the metric."""
+    """The name of the Ossie dataset that should be the parent of the model-scoped metric."""
     relationship: RelationshipAssignment | None
-    """The assignment for the Ossie relationship that's required for the metric, if any."""
+    """The assignment for the Ossie relationship that's required for the model-scoped metric, if any."""
 
 
 @dataclass(frozen=True)

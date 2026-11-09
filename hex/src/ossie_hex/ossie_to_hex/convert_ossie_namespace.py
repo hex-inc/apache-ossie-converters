@@ -31,7 +31,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, assert_never
 
 from ossie import OssieSemanticModel
 
@@ -83,7 +83,7 @@ def initialize_ossie_namespace(
             metric_names.append(ossie_metric.name)
         metric_ids = _convert_names(metric_names, ctx=ctx)
         for name, hex_id in metric_ids.items():
-            ctx.hex_ids.set_for_metric(name, hex_id)
+            ctx.hex_ids.set_for_model_metric(name, hex_id)
 
     with ctx.problem_scope("relationships"):
         relationship_names: list[str] = []
@@ -104,7 +104,7 @@ def finalize_ossie_namespace(
         _member_allocation_inputs(ossie_semantic_model, ctx=ctx), ctx=ctx
     )
     ctx.hex_ids.fields.clear()
-    ctx.hex_ids.metrics.clear()
+    ctx.hex_ids.model_metrics.clear()
     ctx.hex_ids.relationships.clear()
     _store_ids(allocated, ctx=ctx)
     _report_renames(allocated, ctx=ctx)
@@ -119,7 +119,7 @@ class _Member:
     instances can be dictionary keys and deduplicated during allocation.
     """
 
-    group: Literal["datasets", "fields", "metrics", "relationships"]
+    group: Literal["datasets", "fields", "model_metrics", "relationships"]
     """The category or spec field which contains the member."""
 
     name: str
@@ -145,7 +145,17 @@ class _Member:
         if self.group == "fields":
             assert self.dataset_name is not None
             return ["datasets", self.dataset_name, "fields", self.name]
-        return [self.group, self.name]
+        elif self.group == "model_metrics":
+            return ["metrics", self.name]
+        elif self.group == "relationships":
+            return ["relationships", self.name]
+        elif self.group == "datasets":
+            return ["datasets", self.name]
+        elif self.group == "dataset_metrics":
+            assert self.dataset_name is not None
+            return ["datasets", self.dataset_name, "metrics", self.name]
+        else:
+            assert_never(self.group)
 
 
 def _convert_names(
@@ -240,8 +250,8 @@ def _store_ids(ids: dict[_Member, HexEntityId], *, ctx: ExportContext) -> None:
             ctx.hex_ids.set_for_field(
                 allocation_input.dataset_name, allocation_input.name, hex_id
             )
-        elif allocation_input.group == "metrics":
-            ctx.hex_ids.set_for_metric(allocation_input.name, hex_id)
+        elif allocation_input.group == "model_metrics":
+            ctx.hex_ids.set_for_model_metric(allocation_input.name, hex_id)
         else:
             ctx.hex_ids.set_for_relationship(allocation_input.name, hex_id)
 
@@ -283,12 +293,12 @@ def _member_allocation_inputs(
                 )
             )
     for metric in model.metrics or []:
-        if (hex_id := ctx.hex_ids.for_metric(metric.name)) is None:
+        if (hex_id := ctx.hex_ids.for_model_metric(metric.name)) is None:
             continue
-        assignment = ctx.assignment.for_metric(metric.name)
+        assignment = ctx.assignment.for_model_metric(metric.name)
         namespace_keys = (assignment.source,) if assignment is not None else ()
         result.append(
-            _Member("metrics", metric.name, hex_id, namespace_keys=namespace_keys)
+            _Member("model_metrics", metric.name, hex_id, namespace_keys=namespace_keys)
         )
     for relationship in model.relationships or []:
         if (hex_id := ctx.hex_ids.for_relationship(relationship.name)) is None:

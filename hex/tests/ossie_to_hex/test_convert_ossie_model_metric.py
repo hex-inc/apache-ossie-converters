@@ -22,12 +22,12 @@ from ossie import OssieAIContextObject, OssieCustomExtension
 from ossie_hex.hex import HexDataType
 from ossie_hex.ossie_to_hex.context import (
     ExportContext,
-    MetricAnalysis,
-    MetricAssignment,
+    ModelMetricAnalysis,
+    ModelMetricAssignment,
 )
-from ossie_hex.ossie_to_hex.convert_ossie_metric import (
-    analyze_ossie_metric,
-    convert_ossie_metric,
+from ossie_hex.ossie_to_hex.convert_ossie_model_metric import (
+    analyze_ossie_model_metric,
+    convert_ossie_model_metric,
 )
 from ossie_hex.util.parse_sql import SQLGlotDialect, parse_one
 from tests.ossie_to_hex.utils import Quick
@@ -40,11 +40,11 @@ def ctx() -> ExportContext:
     ctx._set_dialects(None, "duckdb")
     ctx.hex_ids.set_for_dataset("bar", "bar")
     ctx.hex_ids.set_for_field("bar", "baz", "baz")
-    ctx.hex_ids.set_for_metric("foo", "foo")
-    analysis = MetricAnalysis("foo", parse_one("bar.baz"), None, ("bar",))
-    ctx.analysis.set_for_metric(analysis.name, analysis)
-    assignment = MetricAssignment("foo", "bar", None)
-    ctx.assignment.set_for_metric(assignment)
+    ctx.hex_ids.set_for_model_metric("foo", "foo")
+    analysis = ModelMetricAnalysis("foo", parse_one("bar.baz"), None, ("bar",))
+    ctx.analysis.set_for_model_metric(analysis.name, analysis)
+    assignment = ModelMetricAssignment("foo", "bar", None)
+    ctx.assignment.set_for_model_metric(assignment)
     return ctx
 
 
@@ -52,7 +52,7 @@ def test_preserve_name(ctx: ExportContext) -> None:
     name = "foo"
     foo = Quick.metric(name, "Integer", [("OSSIE_SQL_2026", "bar.baz")])
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     hex_measure, _ = result
@@ -66,7 +66,7 @@ def test_preserve_description(ctx: ExportContext) -> None:
         "foo", "Integer", [("OSSIE_SQL_2026", "bar.baz")], description=description
     )
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     hex_measure, _ = result
@@ -78,7 +78,7 @@ def test_defaults_to_number_datatype(ctx: ExportContext) -> None:
     datatype = None
     foo = Quick.metric("foo", datatype, [("OSSIE_SQL_2026", "bar.baz")])
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     hex_measure, _ = result
@@ -92,7 +92,7 @@ def test_warns_about_ai_context(ctx: ExportContext) -> None:
         "foo", "Integer", [("OSSIE_SQL_2026", "bar.baz")], ai_context=ai_context
     )
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     assert problems_snapshot(ctx.problems) == snapshot("[WARNING] Not supported")
@@ -107,7 +107,7 @@ def test_warns_about_custom_extensions(ctx: ExportContext) -> None:
         custom_extensions=[custom_extension],
     )
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     assert problems_snapshot(ctx.problems) == snapshot("[WARNING] Not supported")
@@ -116,7 +116,7 @@ def test_warns_about_custom_extensions(ctx: ExportContext) -> None:
 def test_analyzes_expression_with_no_references(ctx: ExportContext) -> None:
     foo = Quick.metric("foo", "Integer", [("OSSIE_SQL_2026", "COUNT(1)")])
 
-    analysis = analyze_ossie_metric(foo, ctx=ctx)
+    analysis = analyze_ossie_model_metric(foo, ctx=ctx)
 
     assert analysis is not None
     assert analysis.expr.sql() == snapshot("COUNT(1)")
@@ -130,7 +130,7 @@ def test_analyzes_expression_with_no_references(ctx: ExportContext) -> None:
 def test_analyzes_expression_with_one_reference(ctx: ExportContext) -> None:
     foo = Quick.metric("foo", "Integer", [("OSSIE_SQL_2026", "bar.baz")])
 
-    analysis = analyze_ossie_metric(foo, ctx=ctx)
+    analysis = analyze_ossie_model_metric(foo, ctx=ctx)
 
     assert analysis is not None
     assert analysis.expr.sql() == snapshot("bar.baz")
@@ -145,7 +145,7 @@ def test_analyzes_expression_with_two_references(ctx: ExportContext) -> None:
     ctx.hex_ids.set_for_dataset("baz", "baz")
     ctx.hex_ids.set_for_field("baz", "qux", "qux")
 
-    analysis = analyze_ossie_metric(foo, ctx=ctx)
+    analysis = analyze_ossie_model_metric(foo, ctx=ctx)
 
     assert analysis is not None
     assert analysis.expr.sql() == snapshot("bar.baz + baz.qux")
@@ -164,7 +164,7 @@ def test_analyzes_expression_with_many_references(ctx: ExportContext) -> None:
     ctx.hex_ids.set_for_dataset("qux", "qux")
     ctx.hex_ids.set_for_field("qux", "corge", "corge")
 
-    analysis = analyze_ossie_metric(foo, ctx=ctx)
+    analysis = analyze_ossie_model_metric(foo, ctx=ctx)
 
     assert analysis is not None
     assert analysis.expr.sql() == snapshot("bar.baz + baz.qux + qux.corge")
@@ -182,7 +182,7 @@ def test_compiles_local_field_reference(ctx: ExportContext) -> None:
         [("OSSIE_SQL_2026", "bar.baz")],
     )
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     hex_measure, hex_model_id = result
@@ -199,12 +199,12 @@ def test_preserves_expression_dialect(ctx: ExportContext) -> None:
         [("BIGQUERY", "COUNTIF(bar.baz)")],
     )
 
-    analysis = MetricAnalysis(
+    analysis = ModelMetricAnalysis(
         "foo", parse_one("COUNTIF(bar.baz)"), SQLGlotDialect.BIGQUERY, ("bar",)
     )
-    ctx.analysis.set_for_metric(analysis.name, analysis)
+    ctx.analysis.set_for_model_metric(analysis.name, analysis)
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is not None
     hex_measure, hex_model_id = result
@@ -218,13 +218,13 @@ def test_reports_missing_source_model() -> None:
 
     ctx = ExportContext()
     ctx._set_dialects(None, "duckdb")
-    ctx.hex_ids.set_for_metric("foo", "foo")
-    analysis = MetricAnalysis("foo", parse_one("bar.baz"), None, ("bar",))
-    ctx.analysis.set_for_metric(analysis.name, analysis)
-    assignment = MetricAssignment("foo", "bar", None)
-    ctx.assignment.set_for_metric(assignment)
+    ctx.hex_ids.set_for_model_metric("foo", "foo")
+    analysis = ModelMetricAnalysis("foo", parse_one("bar.baz"), None, ("bar",))
+    ctx.analysis.set_for_model_metric(analysis.name, analysis)
+    assignment = ModelMetricAssignment("foo", "bar", None)
+    ctx.assignment.set_for_model_metric(assignment)
 
-    result = convert_ossie_metric(foo, ctx=ctx)
+    result = convert_ossie_model_metric(foo, ctx=ctx)
 
     assert result is None
     assert problems_snapshot(ctx.problems) == snapshot(
@@ -237,7 +237,7 @@ def test_analysis_failure_reports_problem(ctx: ExportContext) -> None:
         "invalid", "Integer", [("OSSIE_SQL_2026", "SUM(bar.missing)")]
     )
 
-    analysis = analyze_ossie_metric(metric, ctx=ctx)
+    analysis = analyze_ossie_model_metric(metric, ctx=ctx)
 
     assert analysis is None
     assert problems_snapshot(ctx.problems, include_causes=True) == snapshot("""\
@@ -250,11 +250,11 @@ def test_analysis_failure_does_not_add_duplicate_problem(ctx: ExportContext) -> 
         "invalid", "Integer", [("OSSIE_SQL_2026", "SUM(bar.missing)")]
     )
 
-    analysis = analyze_ossie_metric(metric, ctx=ctx)
+    analysis = analyze_ossie_model_metric(metric, ctx=ctx)
     initial_problems = ctx.problems
-    ctx.analysis.set_for_metric(metric.name, analysis)
+    ctx.analysis.set_for_model_metric(metric.name, analysis)
 
-    result = convert_ossie_metric(metric, ctx=ctx)
+    result = convert_ossie_model_metric(metric, ctx=ctx)
 
     assert result is None
     assert ctx.problems == initial_problems

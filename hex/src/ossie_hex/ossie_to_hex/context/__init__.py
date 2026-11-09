@@ -17,18 +17,18 @@
 
 from .analysis import (
     RELATIONSHIP_DIRECTIONS,
-    MetricAnalysis,
+    ModelMetricAnalysis,
     RelationshipAnalysis,
     RelationshipAnalysisEdge,
 )
-from .assignment import MetricAssignment, RelationshipAssignment
+from .assignment import ModelMetricAssignment, RelationshipAssignment
 from .context import ExportContext
 
 __all__ = [
     "RELATIONSHIP_DIRECTIONS",
     "ExportContext",
-    "MetricAnalysis",
-    "MetricAssignment",
+    "ModelMetricAnalysis",
+    "ModelMetricAssignment",
     "RelationshipAnalysis",
     "RelationshipAnalysisEdge",
     "RelationshipAssignment",

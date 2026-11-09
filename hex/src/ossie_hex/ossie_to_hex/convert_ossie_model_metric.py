@@ -21,7 +21,7 @@ from ossie import OssieMetric
 
 from ..hex import HexDataType, HexEntityId, HexMeasure, HexSql
 from ..util.parse_sql import exp
-from .context import ExportContext, MetricAnalysis, MetricAssignment
+from .context import ExportContext, ModelMetricAnalysis, ModelMetricAssignment
 from .convert_ossie_datatype import convert_ossie_datatype
 from .convert_ossie_dialect_expression import (
     convert_parsed_ossie_dialect_expression,
@@ -30,17 +30,17 @@ from .load_ossie_dialect_expression import parse_ossie_dialect_expression
 from .pick_ossie_dialect_expression import pick_ossie_dialect_expression
 
 
-def analyze_ossie_metric(
-    ossie_metric: OssieMetric,
+def analyze_ossie_model_metric(
+    ossie_model_metric: OssieMetric,
     *,
     ctx: ExportContext,
-) -> MetricAnalysis | None:
-    """Return expression data needed to assign and convert a metric."""
+) -> ModelMetricAnalysis | None:
+    """Return expression data needed to assign and convert a model-scoped metric."""
 
-    with ctx.problem_scope(ossie_metric.name):
+    with ctx.problem_scope(ossie_model_metric.name):
         with ctx.problem_scope("expression"):
             ossie_dialect_expression = pick_ossie_dialect_expression(
-                ossie_metric.expression.dialects,
+                ossie_model_metric.expression.dialects,
                 ctx=ctx,
             )
             if ossie_dialect_expression is None:
@@ -65,38 +65,38 @@ def analyze_ossie_metric(
                     + f" Found {len(dataset_names)}: {', '.join(dataset_names)}."
                 )
 
-        return MetricAnalysis(
-            name=ossie_metric.name,
+        return ModelMetricAnalysis(
+            name=ossie_model_metric.name,
             expr=parsed.expr,
             dialect=parsed.dialect,
             dataset_names=dataset_names,
         )
 
 
-def convert_ossie_metric(
-    ossie_metric: OssieMetric,
+def convert_ossie_model_metric(
+    ossie_model_metric: OssieMetric,
     *,
     ctx: ExportContext,
 ) -> tuple[HexMeasure, HexEntityId] | None:
-    """Convert and assign an analyzed Ossie metric when possible."""
+    """Convert and assign an analyzed Ossie model-scoped metric when possible."""
 
-    with ctx.problem_scope(ossie_metric.name):
+    with ctx.problem_scope(ossie_model_metric.name):
         spec: dict[str, Any] = {}
         source_model_id: HexEntityId | None = None
 
-        spec["id"] = ctx.hex_ids.for_metric(ossie_metric.name)
+        spec["id"] = ctx.hex_ids.for_model_metric(ossie_model_metric.name)
 
-        if ossie_metric.description:
-            spec["description"] = ossie_metric.description
+        if ossie_model_metric.description:
+            spec["description"] = ossie_model_metric.description
 
         with ctx.problem_scope("datatype"):
             spec["type"] = convert_ossie_datatype(
-                ossie_metric.datatype,
+                ossie_model_metric.datatype,
                 HexDataType.NUMBER,
             )
 
-        analysis = _get_metric_analysis(ossie_metric, ctx=ctx)
-        assignment = ctx.assignment.for_metric(ossie_metric.name)
+        analysis = _get_model_metric_analysis(ossie_model_metric, ctx=ctx)
+        assignment = ctx.assignment.for_model_metric(ossie_model_metric.name)
         if analysis is not None and assignment is not None:
             source_dataset_name = assignment.source
             source_model_id = ctx.hex_ids.for_dataset(source_dataset_name)
@@ -105,18 +105,18 @@ def convert_ossie_metric(
                 return None
 
         with ctx.problem_scope("expression"):
-            spec["func_sql"] = _convert_metric_expression(
+            spec["func_sql"] = _convert_model_metric_expression(
                 analysis,
                 assignment,
                 ctx=ctx,
             )
 
         with ctx.problem_scope("ai_context"):
-            if ossie_metric.ai_context is not None:
+            if ossie_model_metric.ai_context is not None:
                 ctx.warn("Not supported", code="ai-context")
 
         with ctx.problem_scope("custom_extensions"):
-            if ossie_metric.custom_extensions is not None:
+            if ossie_model_metric.custom_extensions is not None:
                 ctx.warn("Not supported", code="custom-extensions")
 
         if spec["id"] is None or spec["func_sql"] is None or source_model_id is None:
@@ -130,7 +130,7 @@ def convert_ossie_metric(
         return HexMeasure(**spec), source_model_id
 
 
-def assign_ossie_metric(
+def assign_ossie_model_metric(
     ossie_metric: OssieMetric,
     conversion: tuple[HexMeasure, HexEntityId] | None,
     *,
@@ -147,9 +147,9 @@ def assign_ossie_metric(
         hex_model.measures.append(hex_measure)
 
 
-def _convert_metric_expression(
-    analysis: MetricAnalysis | None,
-    assignment: MetricAssignment | None,
+def _convert_model_metric_expression(
+    analysis: ModelMetricAnalysis | None,
+    assignment: ModelMetricAssignment | None,
     *,
     ctx: ExportContext,
 ) -> HexSql | None:
@@ -219,20 +219,20 @@ def _references_have_hex_ids(
     )
 
 
-def _get_metric_analysis(
+def _get_model_metric_analysis(
     ossie_metric: OssieMetric,
     *,
     ctx: ExportContext,
-) -> MetricAnalysis | None:
+) -> ModelMetricAnalysis | None:
     """
-    Safely retrieve the analysis for an Ossie metric.
+    Safely retrieve the analysis for an Ossie model-scoped metric.
 
     Returns:
-        MetricAnalysis | None: The analysis object for the given Ossie metric, or None if the
-        metric was not successfully analyzed (an error will have already been reported).
+        MetricAnalysis | None: The analysis object for the given Ossie model-scoped metric, or None if the
+        model-scoped metric was not successfully analyzed (an error will have already been reported).
     """
     try:
-        return ctx.analysis.for_metric(ossie_metric.name)
+        return ctx.analysis.for_model_metric(ossie_metric.name)
     except KeyError:
         # indicates a programming error by us; nothing the user can do about it
         ctx.fatal("Unexpected error.", internal_message="Should have been analyzed")

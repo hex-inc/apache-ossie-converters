@@ -27,7 +27,7 @@ class ExportHexIds:
 
     datasets: MutableMapping[str, HexEntityId] = field(default_factory=dict)
     fields: MutableMapping[tuple[str, str], HexEntityId] = field(default_factory=dict)
-    metrics: MutableMapping[str, HexEntityId] = field(default_factory=dict)
+    model_metrics: MutableMapping[str, HexEntityId] = field(default_factory=dict)
     relationships: MutableMapping[str, HexEntityId] = field(default_factory=dict)
 
     def set_for_dataset(self, name: str, hex_id: HexEntityId) -> None:
@@ -48,11 +48,11 @@ class ExportHexIds:
     ) -> HexEntityId | None:
         return self.fields.get((dataset_name, field_name))
 
-    def set_for_metric(self, name: str, hex_id: HexEntityId) -> None:
-        self.metrics[name] = hex_id
+    def set_for_model_metric(self, name: str, hex_id: HexEntityId) -> None:
+        self.model_metrics[name] = hex_id
 
-    def for_metric(self, name: str) -> HexEntityId | None:
-        return self.metrics.get(name)
+    def for_model_metric(self, name: str) -> HexEntityId | None:
+        return self.model_metrics.get(name)
 
     def set_for_relationship(self, name: str, hex_id: HexEntityId) -> None:
         self.relationships[name] = hex_id

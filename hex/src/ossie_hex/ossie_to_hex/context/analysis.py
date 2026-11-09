@@ -27,33 +27,33 @@ from ...util.parse_sql import SQLGlotDialect, exp
 class ExportAnalysis:
     """Analyze expressions of Ossie entities."""
 
-    _metric_analyses: dict[str, MetricAnalysis | None]
-    """Metric analysis results; None records a failed analysis."""
+    _model_metric_analyses: dict[str, ModelMetricAnalysis | None]
+    """Model-scoped metric analysis results; None records a failed analysis."""
 
     _relationship_analyses: dict[str, RelationshipAnalysis]
     """A mapping of Ossie relationship names to their analyses."""
 
     def __init__(self) -> None:
-        self._metric_analyses = {}
+        self._model_metric_analyses = {}
         self._relationship_analyses = {}
 
-    def set_for_metric(
+    def set_for_model_metric(
         self,
         name: str,
-        analysis: MetricAnalysis | None,
+        analysis: ModelMetricAnalysis | None,
     ) -> None:
-        """Record an Ossie metric's analysis result, including failure."""
-        self._metric_analyses[name] = analysis
+        """Record an Ossie model-scoped metric's analysis result, including failure."""
+        self._model_metric_analyses[name] = analysis
 
-    def for_metric(self, name: str) -> MetricAnalysis | None:
-        """Get a metric's result; raise KeyError if no analysis was recorded."""
-        return self._metric_analyses[name]
+    def for_model_metric(self, name: str) -> ModelMetricAnalysis | None:
+        """Get a model-scoped metric's result; raise KeyError if no analysis was recorded."""
+        return self._model_metric_analyses[name]
 
-    def for_metrics(self) -> Iterator[MetricAnalysis]:
-        """Get all successful analyses for Ossie metrics."""
+    def for_model_metrics(self) -> Iterator[ModelMetricAnalysis]:
+        """Get all successful analyses for Ossie model-scoped metrics."""
         return (
             analysis
-            for analysis in self._metric_analyses.values()
+            for analysis in self._model_metric_analyses.values()
             if analysis is not None
         )
 
@@ -73,8 +73,8 @@ class ExportAnalysis:
 
 
 @dataclass(frozen=True)
-class MetricAnalysis:
-    """Dependencies data needed to assign and convert an Ossie metric."""
+class ModelMetricAnalysis:
+    """Dependencies data needed to assign and convert an Ossie model-scoped metric."""
 
     name: str
     expr: exp.Expression

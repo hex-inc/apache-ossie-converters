@@ -24,6 +24,8 @@ from ..util.parse_sql import exp
 from .context import ExportContext, ModelMetricAnalysis, ModelMetricAssignment
 from .convert_ossie_datatype import convert_ossie_datatype
 from .convert_ossie_dialect_expression import (
+    HexLogicalRef,
+    ResolveError,
     convert_parsed_ossie_dialect_expression,
 )
 from .load_ossie_dialect_expression import parse_ossie_dialect_expression
@@ -158,14 +160,16 @@ def _convert_model_metric_expression(
 
     # Metric references are local dimensions or dimensions reached through the
     # exact relationship selected by assignment planning.
-    def resolve(dataset_name: str, field_name: str) -> tuple[str | None, str]:
+    def resolve(dataset_name: str | None, field_name: str) -> HexLogicalRef:
+        if dataset_name is None:
+            raise ResolveError(f"Field {field_name} is not qualified with a dataset")
         dimension_id = ctx.hex_ids.for_field(dataset_name, field_name)
         if dimension_id is None:
             raise ResolveError(
                 f"Unable to resolve field {dataset_name}.{field_name} to a Hex ID"
             )
         if dataset_name == assignment.source:
-            return None, dimension_id
+            return HexLogicalRef(dimension_id)
         if assignment.relationship is None:
             raise ResolveError(
                 f"Metric assignment has no relationship to {dataset_name!r}"
@@ -175,21 +179,14 @@ def _convert_model_metric_expression(
             raise ResolveError(
                 f"Relationship {assignment.relationship.name!r} has no Hex ID"
             )
-        return relation_id, dimension_id
+        return HexLogicalRef(dimension_id, relation_id)
 
-    try:
-        return convert_parsed_ossie_dialect_expression(
-            analysis.expr,
-            analysis.dialect,
-            resolve=resolve,
-        )
-    except ResolveError as e:
-        ctx.error(f"Unable to convert expression: {e}")
-        return None
-
-
-class ResolveError(ValueError):
-    """Internal logic error. Unable to resolve field to a Hex ID."""
+    return convert_parsed_ossie_dialect_expression(
+        analysis.expr,
+        analysis.dialect,
+        resolve=resolve,
+        ctx=ctx,
+    )
 
 
 def _find_dataset_names(expr: exp.Expression) -> tuple[str, ...]:

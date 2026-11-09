@@ -22,6 +22,7 @@ from ossie import OssieDataset
 from ..hex import HexModel
 from ..util.database_table import is_table_name
 from .context import ExportContext
+from .convert_ossie_dataset_metric import convert_ossie_dataset_metric
 from .convert_ossie_field import convert_ossie_field
 
 
@@ -90,6 +91,15 @@ def convert_ossie_dataset(
             else:
                 ctx.warn("Dataset fields are empty")
 
+        with ctx.problem_scope("metrics"):
+            spec["measures"] = []
+            if ossie_dataset.metrics:
+                for ossie_metric in ossie_dataset.metrics:
+                    if hex_measure := convert_ossie_dataset_metric(
+                        ossie_metric, ossie_dataset, ctx=ctx
+                    ):
+                        spec["measures"].append(hex_measure)
+
         with ctx.problem_scope("ai_context"):
             if ossie_dataset.ai_context is not None:
                 ctx.warn("Not supported", code="ai-context")
@@ -105,7 +115,6 @@ def convert_ossie_dataset(
         if spec["id"] is None:
             return None
 
-        spec["measures"] = []
         spec["relations"] = []
 
         return HexModel(**spec)

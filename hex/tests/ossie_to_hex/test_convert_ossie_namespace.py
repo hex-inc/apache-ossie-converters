@@ -193,6 +193,36 @@ def test_finalize_resolves_collisions_across_member_groups(ctx: ExportContext) -
     assert ctx.hex_ids.for_relationship("Amount") == "amount_3"
 
 
+def test_finalize_resolves_dataset_metric_collisions_in_its_dataset(
+    ctx: ExportContext,
+) -> None:
+    dataset_metric = Quick.metric("Amount", None, [("ANSI_SQL", "SUM(amount)")])
+    source = OssieSemanticModel(
+        name="sales",
+        datasets=[
+            ORDERS.model_copy(update={"metrics": [dataset_metric]}),
+            CUSTOMERS.model_copy(
+                update={"metrics": [dataset_metric.model_copy(update={"name": "id"})]}
+            ),
+        ],
+    )
+    initialize_ossie_namespace(source, ctx=ctx)
+    assert ctx.hex_ids.dataset_metrics == {
+        ("orders", "Amount"): "amount",
+        ("customers", "id"): "id",
+    }
+
+    finalize_ossie_namespace(source, ctx=ctx)
+
+    assert ctx.hex_ids.for_field("orders", "amount") == "amount"
+    assert ctx.hex_ids.for_dataset_metric("orders", "Amount") == "amount_2"
+    assert ctx.hex_ids.for_dataset_metric("customers", "id") == "id_2"
+    assert [(p.code, p.cause_path) for p in ctx.problems] == [
+        ("identifier-collision", ["datasets", "customers", "metrics", "id"]),
+        ("identifier-collision", ["datasets", "orders", "metrics", "Amount"]),
+    ]
+
+
 def test_finalize_allows_same_member_id_in_different_models(ctx: ExportContext) -> None:
     source = OssieSemanticModel(
         name="sales",

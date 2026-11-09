@@ -76,6 +76,13 @@ def initialize_ossie_namespace(
                 field_ids = _convert_names(field_names, ctx=ctx)
                 for name, hex_id in field_ids.items():
                     ctx.hex_ids.set_for_field(ossie_dataset.name, name, hex_id)
+            with ctx.problem_scope(ossie_dataset.name, "metrics"):
+                dataset_metric_names: list[str] = []
+                for ossie_metric in ossie_dataset.metrics or []:
+                    dataset_metric_names.append(ossie_metric.name)
+                dataset_metric_ids = _convert_names(dataset_metric_names, ctx=ctx)
+                for name, hex_id in dataset_metric_ids.items():
+                    ctx.hex_ids.set_for_dataset_metric(ossie_dataset.name, name, hex_id)
 
     with ctx.problem_scope("metrics"):
         metric_names: list[str] = []
@@ -104,6 +111,7 @@ def finalize_ossie_namespace(
         _member_allocation_inputs(ossie_semantic_model, ctx=ctx), ctx=ctx
     )
     ctx.hex_ids.fields.clear()
+    ctx.hex_ids.dataset_metrics.clear()
     ctx.hex_ids.model_metrics.clear()
     ctx.hex_ids.relationships.clear()
     _store_ids(allocated, ctx=ctx)
@@ -119,7 +127,13 @@ class _Member:
     instances can be dictionary keys and deduplicated during allocation.
     """
 
-    group: Literal["datasets", "fields", "model_metrics", "relationships"]
+    group: Literal[
+        "datasets",
+        "fields",
+        "model_metrics",
+        "relationships",
+        "dataset_metrics",
+    ]
     """The category or spec field which contains the member."""
 
     name: str
@@ -137,7 +151,8 @@ class _Member:
     """
 
     dataset_name: str | None = None
-    """The original owning dataset name for a field; None for other groups."""
+    """The original owning dataset name for a dataset-scoped member; None for
+    other groups."""
 
     @property
     def path(self) -> KeyPath:
@@ -250,6 +265,11 @@ def _store_ids(ids: dict[_Member, HexEntityId], *, ctx: ExportContext) -> None:
             ctx.hex_ids.set_for_field(
                 allocation_input.dataset_name, allocation_input.name, hex_id
             )
+        elif allocation_input.group == "dataset_metrics":
+            assert allocation_input.dataset_name is not None
+            ctx.hex_ids.set_for_dataset_metric(
+                allocation_input.dataset_name, allocation_input.name, hex_id
+            )
         elif allocation_input.group == "model_metrics":
             ctx.hex_ids.set_for_model_metric(allocation_input.name, hex_id)
         else:
@@ -273,9 +293,10 @@ def _member_allocation_inputs(
 ) -> list[_Member]:
     """Collect normalized members with the namespaces chosen by assignment.
 
-    Fields occupy their owning dataset's namespace. Metrics occupy their source
-    model's namespace, while relationships occupy every planned source model's
-    namespace. Source paths remain based on the original Ossie definitions.
+    Fields and dataset metrics occupy their owning dataset's namespace. Model
+    metrics occupy their source model's namespace, while relationships occupy
+    every planned source model's namespace. Source paths remain based on the
+    original Ossie definitions.
     """
     result: list[_Member] = []
     for dataset in model.datasets:
@@ -287,6 +308,19 @@ def _member_allocation_inputs(
                 _Member(
                     "fields",
                     field.name,
+                    hex_id,
+                    namespace_keys=(dataset.name,),
+                    dataset_name=dataset.name,
+                )
+            )
+        for metric in dataset.metrics or []:
+            hex_id = ctx.hex_ids.for_dataset_metric(dataset.name, metric.name)
+            if hex_id is None:
+                continue
+            result.append(
+                _Member(
+                    "dataset_metrics",
+                    metric.name,
                     hex_id,
                     namespace_keys=(dataset.name,),
                     dataset_name=dataset.name,

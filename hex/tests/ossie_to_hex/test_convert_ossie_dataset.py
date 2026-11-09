@@ -219,3 +219,19 @@ def test_empty_measures_relations(ctx: ExportContext) -> None:
     assert result.measures == []
     assert result.relations == []
     assert not ctx.problems
+
+
+def test_converts_metrics_to_measures(ctx: ExportContext) -> None:
+    foo = Quick.dataset(
+        "foo",
+        "public.foo",
+        [("id", "String", [("ANSI_SQL", "id")])],
+        [("id_count", "Integer", [("ANSI_SQL", "COUNT(DISTINCT id)")])],
+    )
+    ctx.hex_ids.set_for_dataset_metric("foo", "id_count", "id_count")
+    result = convert_ossie_dataset(foo, ctx=ctx)
+    assert result is not None
+    assert [(m.id, m.func_sql) for m in result.measures] == snapshot(
+        [("id_count", "COUNT(DISTINCT ${id})")]
+    )
+    assert not ctx.problems

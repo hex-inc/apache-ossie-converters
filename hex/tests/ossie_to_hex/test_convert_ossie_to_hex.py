@@ -202,6 +202,9 @@ resources:
     type: number
     expr_sql: ss_net_profit
   measures:
+  - id: total_quantity
+    description: Total quantity sold across all store sales
+    func_sql: SUM(${ss_quantity})
   - id: total_sales
     description: Total sales revenue across all transactions
     func_sql: SUM(${ss_ext_sales_price})

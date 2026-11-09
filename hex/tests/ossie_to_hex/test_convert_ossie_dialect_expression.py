@@ -19,9 +19,14 @@ from inline_snapshot import snapshot
 
 from ossie_hex.ossie_to_hex.context import ExportContext
 from ossie_hex.ossie_to_hex.convert_ossie_dialect_expression import (
+    HexLogicalRef,
+    HexPhysicalRef,
+    HexRef,
+    ResolveError,
     convert_ossie_dialect_expression,
 )
 from tests.ossie_to_hex.utils import Quick
+from tests.utils import problems_snapshot
 
 
 def test_converts_without_resolver() -> None:
@@ -35,11 +40,11 @@ def test_converts_without_resolver() -> None:
 def test_converts_with_no_references() -> None:
     dialect_expression = Quick.dialect_expression("OSSIE_SQL_2026", "SUM(1)")
     ctx = ExportContext()
-    references: list[tuple[str, str]] = []
+    references: list[tuple[str | None, str]] = []
 
-    def resolve(dataset_name: str, field_name: str) -> tuple[str | None, str]:
+    def resolve(dataset_name: str | None, field_name: str) -> HexLogicalRef:
         references.append((dataset_name, field_name))
-        return dataset_name, field_name
+        return HexLogicalRef(field_name, dataset_name)
 
     result = convert_ossie_dialect_expression(
         dialect_expression,
@@ -57,11 +62,11 @@ def test_converts_with_one_qualified_reference() -> None:
         "OSSIE_SQL_2026", "SUM(orders.amount)"
     )
     ctx = ExportContext()
-    references: list[tuple[str, str]] = []
+    references: list[tuple[str | None, str]] = []
 
-    def resolve(dataset_name: str, field_name: str) -> tuple[str | None, str]:
+    def resolve(dataset_name: str | None, field_name: str) -> HexLogicalRef:
         references.append((dataset_name, field_name))
-        return dataset_name, field_name
+        return HexLogicalRef(field_name, dataset_name)
 
     result = convert_ossie_dialect_expression(
         dialect_expression,
@@ -80,11 +85,11 @@ def test_converts_with_many_qualified_references() -> None:
         "SUM(orders.amount) + customers.id",
     )
     ctx = ExportContext()
-    references: list[tuple[str, str]] = []
+    references: list[tuple[str | None, str]] = []
 
-    def resolve(dataset_name: str, field_name: str) -> tuple[str | None, str]:
+    def resolve(dataset_name: str | None, field_name: str) -> HexLogicalRef:
         references.append((dataset_name, field_name))
-        return dataset_name, field_name
+        return HexLogicalRef(field_name, dataset_name)
 
     result = convert_ossie_dialect_expression(
         dialect_expression,
@@ -95,3 +100,88 @@ def test_converts_with_many_qualified_references() -> None:
     assert result == snapshot("SUM(${orders.amount}) + ${customers.id}")
     assert references == [("orders", "amount"), ("customers", "id")]
     assert not ctx.problems
+
+
+def test_resolves_unqualified_reference_with_no_table() -> None:
+    dialect_expression = Quick.dialect_expression("ANSI_SQL", "SUM(amount)")
+    ctx = ExportContext()
+    references: list[tuple[str | None, str]] = []
+
+    def resolve(table: str | None, name: str) -> HexRef:
+        references.append((table, name))
+        return HexLogicalRef(name)
+
+    result = convert_ossie_dialect_expression(
+        dialect_expression,
+        resolve=resolve,
+        ctx=ctx,
+    )
+
+    assert result == snapshot("SUM(${amount})")
+    assert references == [(None, "amount")]
+    assert not ctx.problems
+
+
+def test_converts_physical_reference_to_unqualified_column() -> None:
+    dialect_expression = Quick.dialect_expression(
+        "SNOWFLAKE", 'SUM(source.amount) + SUM("source"."Qty")'
+    )
+    ctx = ExportContext()
+
+    def resolve(table: str | None, name: str) -> HexRef:
+        return HexPhysicalRef()
+
+    result = convert_ossie_dialect_expression(
+        dialect_expression,
+        resolve=resolve,
+        ctx=ctx,
+    )
+
+    assert result == snapshot('SUM(amount) + SUM("Qty")')
+    assert not ctx.problems
+
+
+def test_reports_every_unresolvable_reference() -> None:
+    dialect_expression = Quick.dialect_expression(
+        "ANSI_SQL", "SUM(orders.amount) + SUM(orders.missing) + SUM(gone)"
+    )
+    ctx = ExportContext()
+
+    def resolve(table: str | None, name: str) -> HexRef:
+        if name == "amount":
+            return HexLogicalRef(name)
+        raise ResolveError(f"Unable to resolve {name}")
+
+    result = convert_ossie_dialect_expression(
+        dialect_expression,
+        resolve=resolve,
+        ctx=ctx,
+    )
+
+    assert result is None
+    assert problems_snapshot(ctx.problems) == snapshot("""\
+[ERROR] Unable to resolve missing
+
+[ERROR] Unable to resolve gone""")
+
+
+def test_reports_reference_with_too_many_parts() -> None:
+    dialect_expression = Quick.dialect_expression("ANSI_SQL", "SUM(db.orders.amount)")
+    ctx = ExportContext()
+    references: list[tuple[str | None, str]] = []
+
+    def resolve(table: str | None, name: str) -> HexRef:
+        references.append((table, name))
+        return HexLogicalRef(name, table)
+
+    result = convert_ossie_dialect_expression(
+        dialect_expression,
+        resolve=resolve,
+        ctx=ctx,
+    )
+
+    assert result is None
+    assert references == []
+    assert problems_snapshot(ctx.problems) == snapshot(
+        "[ERROR] Reference 'db.orders.amount' has too many parts"
+    )

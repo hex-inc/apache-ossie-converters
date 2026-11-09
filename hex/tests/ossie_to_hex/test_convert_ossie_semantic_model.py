@@ -191,6 +191,41 @@ def test_assigns_metric_and_relationship(
     assert not ctx.problems
 
 
+def test_converts_dataset_metric_alongside_model_metric(
+    ctx: ExportContext,
+    orders: OssieDataset,
+    customers: OssieDataset,
+    order_customer: OssieRelationship,
+    sales_per_customer: OssieMetric,
+) -> None:
+    total_amount = Quick.metric(
+        "total_amount",
+        "Decimal",
+        [("ANSI_SQL", "SUM(amount) - SUM(source.discount)")],
+    )
+    semantic_model = OssieSemanticModel(
+        name="sales",
+        datasets=[orders.model_copy(update={"metrics": [total_amount]}), customers],
+        relationships=[order_customer],
+        metrics=[sales_per_customer],
+    )
+
+    result = convert_ossie_semantic_model(semantic_model, ctx=ctx)
+
+    orders_model = _model_by_id(result.resources, "orders")
+    assert orders_model is not None
+    assert [(m.id, m.func_sql) for m in orders_model.measures] == snapshot(
+        [
+            ("total_amount", "SUM(${amount}) - SUM(discount)"),
+            (
+                "sales_per_customer",
+                "SUM(${amount}) / COUNT(DISTINCT ${order_customer.id})",
+            ),
+        ]
+    )
+    assert not ctx.problems
+
+
 def test_assignment_prefers_from_to_direction(
     ctx: ExportContext,
     orders: OssieDataset,

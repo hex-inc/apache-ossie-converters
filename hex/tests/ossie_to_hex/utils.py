@@ -88,7 +88,9 @@ class Quick:
     def dataset(
         name: str,
         source: str,
-        fields: list[tuple[str, str, list[tuple[str, str]]]],
+        fields: list[tuple[str, str, list[tuple[str, str]]] | OssieField] | None = None,
+        metrics: list[tuple[str, str | None, list[tuple[str, str]]] | OssieMetric]
+        | None = None,
         *,
         description: str | None = None,
         primary_key: list[str] | None = None,
@@ -96,13 +98,19 @@ class Quick:
         ai_context: OssieAIContext | None = None,
         custom_extensions: list[OssieCustomExtension] | None = None,
     ) -> OssieDataset:
+        fields_ = [
+            field if isinstance(field, OssieField) else Quick.field(*field)
+            for field in fields or []
+        ]
+        metrics_ = [
+            metric if isinstance(metric, OssieMetric) else Quick.metric(*metric)
+            for metric in metrics or []
+        ]
         return OssieDataset(
             name=name,
             source=source,
-            fields=[
-                Quick.field(name, datatype, expression)
-                for name, datatype, expression in fields
-            ],
+            fields=fields_,
+            metrics=metrics_,
             description=description,
             primary_key=primary_key,
             unique_keys=unique_keys,

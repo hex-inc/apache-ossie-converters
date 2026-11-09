@@ -51,7 +51,7 @@ EXPORT_PROBLEM_SUMMARIES: dict[ExportProblemCode, str] = {
     ),
     "duplicate-name": ("Duplicate Ossie names are ambiguous; conversion continued."),
     "is-time": "Temporal role markers are not supported in Hex and were dropped.",
-    "missing-dialect": "No dialect was specified; ANSI SQL was used.",
+    "missing-dialect": "No dialect was specified; OSSIE_SQL_2026 was used.",
     "missing-datatype": "A datatype is required in Hex; a default was used.",
     "project-description": (
         "Project descriptions are not supported in Hex and were dropped."

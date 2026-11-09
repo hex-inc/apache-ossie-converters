@@ -95,7 +95,7 @@ def test_missing_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_default_dialect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    """Should use ANSI SQL without reporting a fallback."""
+    """Should use the default Ossie SQL dialect."""
     input_file = TPCDS
     i = str(input_file)
     output_dir = tmp_path / "hex_out"
@@ -112,7 +112,7 @@ def test_default_dialect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> 
     assert message == snapshot("""\
 Success!
 Converted INPUT -> OUTPUT/tpcds_retail_model/.
-Encountered 52 problems: 52 warnings.
+Encountered 91 problems: 91 warnings.
   (Run with -v to see a grouped summary.)
 """)
 
@@ -133,10 +133,11 @@ def test_verbose_problem_summary(
     assert message == snapshot("""\
 Success!
 Converted INPUT -> OUTPUT/tpcds_retail_model/.
-Encountered 52 problems: 52 warnings.
+Encountered 91 problems: 91 warnings.
 
-Warnings (52)
+Warnings (91)
   43× `ai_context` — AI context is not preserved in Hex and was dropped.
+  39× Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
    3× `Field.is_time` — Temporal role markers are not supported in Hex and were dropped.
    2× `Field.datatype` — A datatype is required in Hex; a default was used.
    1× `Dataset.primary_key` — Composite primary keys are not supported in Hex and were dropped.
@@ -205,10 +206,13 @@ def test_output_file_reports_error(
     assert message == snapshot("""\
 Failed.
 Converted INPUT -> OUTPUT/foo/.
-Encountered 1 problem: 1 error.
+Encountered 2 problems: 1 error, 1 warning.
 
 Errors (1)
   1× Failed to create project directory: OS_ERROR
+
+Warnings (1)
+  1× Preferred dialect OssieDialect.OSSIE_SQL_2026 not found for expression; using fallback dialect OssieDialect.ANSI_SQL
 """)
     assert output.read_text(encoding="utf-8") == "existing file"
 

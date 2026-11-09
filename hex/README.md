@@ -59,14 +59,14 @@ Options:
 - `-o, --output <directory>` — Optional. Directory where Hex YAML files are
   written. If omitted, the current working directory is used.
 - `-d, --dialect <dialect>` — Optional. Ossie dialect to pick from Ossie
-  expressions. If omitted, `ANSI_SQL` is used.
+  expressions. If omitted, `OSSIE_SQL_2026` is used.
 - `-v, --verbose` — Optional. Show a grouped problem summary. Repeat the flag
   (`-vv`) to show every occurrence with its conversion phase and cause path.
 
 Example:
 
 ```bash
-ossie-hex export -i ossie.yaml -o hex/ --dialect snowflake
+ossie-hex export -i ossie.yaml -o hex/
 ```
 
 ### Python API
@@ -81,7 +81,6 @@ from ossie_hex import convert_ossie_to_hex
 hex_project, problems = convert_ossie_to_hex(
     input="ossie.yaml",
     output="hex/",
-    dialect="snowflake",
 )
 ```
 
@@ -91,7 +90,8 @@ Options:
 - `output` — Optional. Directory where Hex YAML files are written. If omitted,
   no files are written.
 - `dialect` — Optional. Ossie dialect to pick from Ossie expressions. If
-  omitted, `ANSI_SQL` is preferred, falling back to the first available variant.
+  omitted, `OSSIE_SQL_2026` is preferred, falling back to `ANSI_SQL`, then the
+  first available variant.
 
 Returns: a tuple of
 

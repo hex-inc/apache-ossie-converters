@@ -19,7 +19,6 @@ from collections.abc import Iterator
 
 import pytest
 from inline_snapshot import snapshot
-from ossie import OssieDialect
 
 from ossie_hex.ossie_to_hex.context import ExportContext
 from ossie_hex.ossie_to_hex.pick_ossie_dialect_expression import (
@@ -32,7 +31,6 @@ from tests.utils import problems_snapshot
 @pytest.fixture
 def ctx() -> Iterator[ExportContext]:
     ctx = ExportContext()
-    ctx.set_ossie_dialect(OssieDialect.ANSI_SQL)
     with ctx.phase_scope("load"):
         yield ctx
 
@@ -58,32 +56,70 @@ def test_picks_preferred_variant(ctx: ExportContext, preferred: str) -> None:
     assert problems_snapshot(ctx.problems) == snapshot("")
 
 
-def test_prefers_ansi_fallback_over_other_variants(ctx: ExportContext) -> None:
-    preferred_dialect = Quick.dialect("SNOWFLAKE")
-    ctx.set_ossie_dialect(preferred_dialect)
-    expression = Quick.expression(
-        [
-            ("BIGQUERY", "foo.bar + 1"),
-            ("ANSI_SQL", "foo.bar"),
-        ]
-    )
-
-    result = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
-
-    assert result is expression.dialects[-1]
-    assert problems_snapshot(ctx.problems) == snapshot(
-        "[WARNING] Preferred dialect OssieDialect.SNOWFLAKE not found for expression; using fallback dialect OssieDialect.ANSI_SQL"
-    )
-
-
-def test_falls_back_to_first_variant_when_preferred_and_ansi_are_missing(
-    ctx: ExportContext,
+@pytest.mark.parametrize("preferred", [None, "ANSI_SQL", "OSSIE_SQL_2026", "SNOWFLAKE"])
+@pytest.mark.parametrize("dialect", ["ANSI_SQL", "OSSIE_SQL_2026", "SNOWFLAKE"])
+def test_uses_sole_variant_quietly(
+    ctx: ExportContext, preferred: str | None, dialect: str
 ) -> None:
-    expression = Quick.expression([("BIGQUERY", "foo.bar"), ("DAX", "SELECT FROM")])
+    ctx.set_ossie_dialect(Quick.dialect(preferred) if preferred else None)
+    expression = Quick.expression([(dialect, "foo.bar")])
 
     result = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
 
     assert result is expression.dialects[0]
-    assert problems_snapshot(ctx.problems) == snapshot(
-        "[WARNING] Preferred dialect OssieDialect.ANSI_SQL not found for expression; using fallback dialect OssieDialect.BIGQUERY"
+    assert not ctx.problems
+    assert ctx.selected_ossie_dialects == {Quick.dialect(dialect)}
+
+
+@pytest.mark.parametrize("preferred", [None, "SNOWFLAKE"])
+def test_requires_matching_preference_for_multiple_variants(
+    ctx: ExportContext, preferred: str | None
+) -> None:
+    ctx.set_ossie_dialect(Quick.dialect(preferred) if preferred else None)
+    expression = Quick.expression(
+        [("ANSI_SQL", "foo.bar"), ("OSSIE_SQL_2026", "foo.bar")]
     )
+
+    result = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
+
+    assert result is None
+    assert len(ctx.problems) == 1
+    assert ctx.problems[0].severity == "error"
+    assert "--dialect" in ctx.problems[0].message
+    assert "ANSI_SQL" in ctx.problems[0].message
+    assert "OSSIE_SQL_2026" in ctx.problems[0].message
+    assert not ctx.selected_ossie_dialects
+
+
+def test_reports_missing_variants(ctx: ExportContext) -> None:
+    result = pick_ossie_dialect_expression([], ctx=ctx)
+
+    assert result is None
+    assert problems_snapshot(ctx.problems) == snapshot(
+        "[ERROR] Expression has no dialect variants."
+    )
+
+
+def test_repeated_matching_dialect_is_ambiguous(ctx: ExportContext) -> None:
+    ctx.set_ossie_dialect(Quick.dialect("ANSI_SQL"))
+    expression = Quick.expression(
+        [("ANSI_SQL", "foo.bar"), ("ANSI_SQL", "foo.bar + 1")]
+    )
+
+    result = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
+
+    assert result is None
+    assert len(ctx.problems) == 1
+    assert "multiple ANSI_SQL variants" in ctx.problems[0].message
+
+
+def test_does_not_repeat_selection_errors_during_conversion(ctx: ExportContext) -> None:
+    expression = Quick.expression(
+        [("ANSI_SQL", "foo.bar"), ("SNOWFLAKE", "foo.bar + 1")]
+    )
+    pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
+    with ctx.phase_scope("convert"):
+        result = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
+
+    assert result is None
+    assert len(ctx.problems) == 1

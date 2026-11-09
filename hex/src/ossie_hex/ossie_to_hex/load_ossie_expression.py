@@ -29,12 +29,12 @@ def load_ossie_field_expression(
     ossie_expression: OssieExpression,
     *,
     ctx: ExportContext,
-) -> OssieExpression:
+) -> OssieExpression | None:
     """Load an Ossie expression declared on an Ossie field.
 
     Attempts to find the preferred dialect and validates the expression.
 
-    Returns the original expression regardless of validation problems.
+    Returns the original expression, or None when no variant can be selected.
     """
     # ASSUMPTION: Ossie field expressions are only allowed to reference underlying
     # physical columns (on database table/view/query) and do not contain logical
@@ -42,9 +42,10 @@ def load_ossie_field_expression(
     # the parsed output of the dialect expression(s).
     with ctx.problem_scope("dialects"):
         choice = pick_ossie_dialect_expression(ossie_expression.dialects, ctx=ctx)
-        if choice is not None:
-            with ctx.problem_scope(choice.dialect.value):
-                validate_ossie_field_dialect_expression(choice, ctx=ctx)
+        if choice is None:
+            return None
+        with ctx.problem_scope(choice.dialect.value):
+            validate_ossie_field_dialect_expression(choice, ctx=ctx)
         return ossie_expression
 
 
@@ -53,7 +54,7 @@ def load_ossie_metric_expression(
     *,
     field_names: list[tuple[str, str]],
     ctx: ExportContext,
-) -> OssieExpression:
+) -> OssieExpression | None:
     """Load an Ossie expression declared on an Ossie metric.
 
     Args:
@@ -61,13 +62,14 @@ def load_ossie_metric_expression(
 
     Attempts to find the preferred dialect and validates the expression.
 
-    Returns the original expression regardless of validation problems.
+    Returns the original expression, or None when no variant can be selected.
     """
     with ctx.problem_scope("dialects"):
         choice = pick_ossie_dialect_expression(expression.dialects, ctx=ctx)
-        if choice is not None:
-            with ctx.problem_scope(choice.dialect.value):
-                validate_ossie_metric_dialect_expression(
-                    choice, field_names=field_names, ctx=ctx
-                )
+        if choice is None:
+            return None
+        with ctx.problem_scope(choice.dialect.value):
+            validate_ossie_metric_dialect_expression(
+                choice, field_names=field_names, ctx=ctx
+            )
         return expression

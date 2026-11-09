@@ -24,25 +24,12 @@ def load_ossie_dialect(
     ossie_dialect: OssieDialect | str | None,
     *,
     ctx: ExportContext,
-) -> OssieDialect:
-    # Even though OssieDocument specifies `dialects` as a top-level field, this isn't
-    # technically part of the core spec. So we don't use it. Otherwise we would validate
-    # against it and pick the first as a fallback.
-
-    if isinstance(ossie_dialect, OssieDialect):
+) -> OssieDialect | None:
+    """Parse an optional expression preference without assuming a default dialect."""
+    if ossie_dialect is None or isinstance(ossie_dialect, OssieDialect):
         return ossie_dialect
-    elif isinstance(ossie_dialect, str):
-        try:
-            value = ossie_dialect.upper()
-            return OssieDialect(value)
-        except ValueError:
-            ctx.warn(
-                message=f"Invalid Ossie dialect: {ossie_dialect}. Using ANSI_SQL instead.",
-            )
-            return OssieDialect.ANSI_SQL
-    else:
-        ctx.info(
-            "No Ossie dialect specified; using ANSI_SQL",
-            code="missing-dialect",
-        )
-        return OssieDialect.ANSI_SQL
+    try:
+        return OssieDialect(ossie_dialect.upper())
+    except ValueError:
+        ctx.error(f"Invalid Ossie dialect: {ossie_dialect}.")
+        return None

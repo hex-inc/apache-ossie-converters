@@ -21,7 +21,10 @@ from ossie import OssieDialect
 
 from ossie_hex.hex import HexDialect, HexDialectName
 from ossie_hex.ossie_to_hex.context import ExportContext
-from ossie_hex.ossie_to_hex.convert_ossie_dialect import convert_ossie_dialect
+from ossie_hex.ossie_to_hex.convert_ossie_dialect import (
+    convert_ossie_dialect,
+    infer_hex_dialect,
+)
 from tests.utils import problems_snapshot
 
 
@@ -34,7 +37,7 @@ def ctx() -> ExportContext:
     ("ossie_dialect", "hex_dialect_name"),
     [
         (OssieDialect.ANSI_SQL, "duckdb"),
-        (OssieDialect.OSSIE_SQL_2026, "snowflake"),
+        (OssieDialect.OSSIE_SQL_2026, "duckdb"),
         (OssieDialect.BIGQUERY, "bigquery"),
         (OssieDialect.DATABRICKS, "databricks"),
         (OssieDialect.SNOWFLAKE, "snowflake"),
@@ -68,4 +71,50 @@ def test_falls_back_to_duckdb_for_expression_language(
     assert result == HexDialect("duckdb")
     assert problems_snapshot(ctx.problems) == snapshot(
         "[INFO] Ossie dialect is an expression language; using DuckDB as SQL dialect for Hex semantic project"
+    )
+
+
+@pytest.mark.parametrize(
+    ("dialects", "expected"),
+    [
+        ([], "duckdb"),
+        ([OssieDialect.ANSI_SQL], "duckdb"),
+        ([OssieDialect.OSSIE_SQL_2026], "duckdb"),
+        ([OssieDialect.ANSI_SQL, OssieDialect.OSSIE_SQL_2026], "duckdb"),
+        (
+            [
+                OssieDialect.ANSI_SQL,
+                OssieDialect.OSSIE_SQL_2026,
+                OssieDialect.SNOWFLAKE,
+            ],
+            "snowflake",
+        ),
+        (
+            [OssieDialect.ANSI_SQL, OssieDialect.OSSIE_SQL_2026, OssieDialect.BIGQUERY],
+            "bigquery",
+        ),
+        ([OssieDialect.OSSIE_SQL_2026, OssieDialect.DATABRICKS], "databricks"),
+    ],
+)
+def test_infers_project_dialect(
+    ctx: ExportContext, dialects: list[OssieDialect], expected: HexDialectName
+) -> None:
+    ctx.selected_ossie_dialects.update(dialects)
+    # An unused expression preference must not determine the project engine.
+    ctx.set_ossie_dialect(OssieDialect.SNOWFLAKE)
+
+    result = infer_hex_dialect(ctx=ctx)
+
+    assert result == HexDialect(expected)
+    assert not ctx.problems
+
+
+def test_rejects_incompatible_project_dialects(ctx: ExportContext) -> None:
+    ctx.selected_ossie_dialects.update([OssieDialect.SNOWFLAKE, OssieDialect.BIGQUERY])
+
+    result = infer_hex_dialect(ctx=ctx)
+
+    assert result is None
+    assert problems_snapshot(ctx.problems) == snapshot(
+        "[ERROR] Selected expressions use incompatible dialects: BIGQUERY, SNOWFLAKE. A Hex project must use one SQL dialect."
     )

@@ -73,8 +73,11 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str.lower,
         choices=_OSSIE_DIALECT_CHOICES,
         metavar="DIALECT",
-        help=f"Ossie expression dialect, one of: {_OSSIE_DIALECT_LIST}",
-        default=OssieDialect.ANSI_SQL.value.lower(),
+        help=(
+            "select this dialect when an expression provides multiple variants; "
+            "expressions with one variant always use that variant. "
+            f"One of: {_OSSIE_DIALECT_LIST}"
+        ),
     )
     export.add_argument(
         "-v",

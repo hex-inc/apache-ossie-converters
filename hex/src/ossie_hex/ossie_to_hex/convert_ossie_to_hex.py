@@ -24,7 +24,7 @@ from ossie import OssieDialect
 from ..hex import HexProject
 from ..util.problem import Problem
 from .context import ExportContext
-from .convert_ossie_dialect import convert_ossie_dialect
+from .convert_ossie_dialect import infer_hex_dialect
 from .convert_ossie_document import convert_ossie_document
 from .dump_hex_project import dump_hex_project
 from .load_ossie_dialect import load_ossie_dialect
@@ -43,9 +43,10 @@ def convert_ossie_to_hex(
         - `input`: A path to the Ossie document file.
         - `output`: Optional. A path to the desired output directory. If not provided,
           the output is not written to a file.
-        - `dialect`: Optional. An Ossie expression dialect to prefer, defaulting to `ANSI_SQL`.
-          If unavailable, select `ANSI_SQL`, then the first variant in source order.
-          Only the selected variant is validated and preserved in Hex expressions.
+        - `dialect`: Optional. Select this dialect for expressions with multiple
+          variants. Expressions with one variant always use that variant. Unresolved
+          choices are reported as errors. The Hex project dialect is inferred from
+          the selected expressions independently of this preference.
 
     Returns: a tuple of:
         - `hex_project`: A Hex semantic project.
@@ -56,10 +57,14 @@ def convert_ossie_to_hex(
     with ctx.phase_scope("load"):
         ossie_dialect = load_ossie_dialect(dialect, ctx=ctx)
         ctx.set_ossie_dialect(ossie_dialect)
+        if ctx.problems:
+            return None, ctx.problems
         ossie_document = load_ossie_document(document_path=input, ctx=ctx)
 
     with ctx.phase_scope("convert"):
-        hex_dialect = convert_ossie_dialect(ossie_dialect, ctx=ctx)
+        hex_dialect = infer_hex_dialect(ctx=ctx)
+        if hex_dialect is None:
+            return None, ctx.problems
         ctx.set_hex_dialect(hex_dialect)
         hex_project = convert_ossie_document(
             ossie_document,

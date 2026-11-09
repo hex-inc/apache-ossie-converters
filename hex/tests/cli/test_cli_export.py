@@ -24,6 +24,7 @@ from inline_snapshot import snapshot
 from ossie_hex.cli import main
 from ossie_hex.cli.report import format_export_report
 from ossie_hex.util.problem import Problem
+from ossie_hex.util.yaml import dump_yaml, load_yaml
 
 TPCDS = (
     Path(__file__).resolve().parents[3]
@@ -94,8 +95,8 @@ def test_missing_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     )
 
 
-def test_default_dialect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    """Should use ANSI SQL without reporting a fallback."""
+def test_without_dialect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    """Should use each expression's sole variant without dialect warnings."""
     input_file = TPCDS
     i = str(input_file)
     output_dir = tmp_path / "hex_out"
@@ -232,3 +233,51 @@ def test_invalid_dialect(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> 
 usage: ossie-hex export [-h] -i INPUT [-o OUTPUT] [-d DIALECT] [-v]
 ossie-hex export: error: argument -d/--dialect: invalid choice: 'invalid' (choose from ansi_sql, snowflake, mdx, maql, tableau, databricks, bigquery, sigma, thoughtspot, dax, holistics_aql, ossie_sql_2026)
 """)
+
+
+@pytest.mark.parametrize("dialect", [None, "ansi_sql"])
+def test_mixed_single_variants_need_no_preference(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    mixed_dialect_input: Path,
+    dialect: str | None,
+) -> None:
+    output = tmp_path / "out"
+    args = ["export", "-i", str(mixed_dialect_input), "-o", str(output)]
+    if dialect is not None:
+        args.extend(["--dialect", dialect])
+
+    code = main(args)
+
+    assert code == 0
+    assert "Encountered no problems." in capsys.readouterr().err
+    model = load_yaml((output / "mixed" / "orders.yml").read_text(encoding="utf-8"))
+    assert model["dimensions"][2]["expr_sql"] == "IFF(amount > 0, amount, 0)"
+
+
+@pytest.mark.parametrize("dialect", [None, "bigquery", "snowflake"])
+def test_multiple_variants_require_a_matching_preference(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    minimal_ossie_input: Path,
+    dialect: str | None,
+) -> None:
+    data = load_yaml(minimal_ossie_input.read_text(encoding="utf-8"))
+    variants = data["datasets"][0]["fields"][0]["expression"]["dialects"]
+    variants.append({"dialect": "SNOWFLAKE", "expression": "ABS(id)"})
+    minimal_ossie_input.write_text(dump_yaml(data), encoding="utf-8")
+    output = tmp_path / "out"
+    args = ["export", "-v", "-i", str(minimal_ossie_input), "-o", str(output)]
+    if dialect is not None:
+        args.extend(["--dialect", dialect])
+
+    code = main(args)
+
+    if dialect == "snowflake":
+        assert code == 0
+        assert "Encountered no problems." in capsys.readouterr().err
+        model = load_yaml((output / "foo" / "bar.yml").read_text(encoding="utf-8"))
+        assert model["dimensions"][0]["expr_sql"] == "ABS(id)"
+    else:
+        assert code == 1
+        assert "Select one with --dialect" in capsys.readouterr().err

@@ -59,14 +59,15 @@ Options:
 - `-o, --output <directory>` — Optional. Directory where Hex YAML files are
   written. If omitted, the current working directory is used.
 - `-d, --dialect <dialect>` — Optional. Ossie dialect to pick from Ossie
-  expressions. If omitted, `ANSI_SQL` is used.
+  expressions with multiple variants. Expressions with one variant always use
+  that variant. Ambiguous expressions require this option.
 - `-v, --verbose` — Optional. Show a grouped problem summary. Repeat the flag
   (`-vv`) to show every occurrence with its conversion phase and cause path.
 
 Example:
 
 ```bash
-ossie-hex export -i ossie.yaml -o hex/ --dialect snowflake
+ossie-hex export -i ossie.yaml -o hex/
 ```
 
 ### Python API
@@ -81,7 +82,6 @@ from ossie_hex import convert_ossie_to_hex
 hex_project, problems = convert_ossie_to_hex(
     input="ossie.yaml",
     output="hex/",
-    dialect="snowflake",
 )
 ```
 
@@ -91,7 +91,15 @@ Options:
 - `output` — Optional. Directory where Hex YAML files are written. If omitted,
   no files are written.
 - `dialect` — Optional. Ossie dialect to pick from Ossie expressions. If
-  omitted, `ANSI_SQL` is preferred, falling back to the first available variant.
+  supplied, it resolves expressions with multiple variants. Expressions with
+  one variant use it regardless of this preference. Missing or unmatched
+  preferences for multiple variants are reported as errors.
+
+The Hex project dialect is inferred from selected expressions. Portable
+`ANSI_SQL` and `OSSIE_SQL_2026` variants can accompany one vendor dialect,
+such as `SNOWFLAKE`. Conflicting vendor dialects are reported as an error.
+Portable-only documents use DuckDB as the project default. The Snowflake
+approximation used to parse `OSSIE_SQL_2026` does not select a project engine.
 
 Returns: a tuple of
 

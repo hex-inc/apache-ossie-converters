@@ -768,6 +768,45 @@ class TestMetricConversion:
             "SUM(orders.amount_input_2)", "AVG(orders.amount_input_2)"
         ]
 
+    def test_compound_metric_input_qualifies_columns_and_keeps_date_unit(self) -> None:
+        orders = semantic_model_with_guaranteed_meta(
+            name="orders",
+            dimensions=[_dimension("opened", expr="started_at"), _dimension("closed", expr="ended_at")],
+        )
+        metric = _metric_with_agg("elapsed", AggregationType.SUM, "COALESCE(DATEDIFF(day, started_at, ended_at), 0)", "orders")
+        output = MSIToOssieConverter().convert(_manifest([orders], [metric])).output
+
+        assert [field.name for field in _fields(output)] == ["opened", "closed"]
+        assert _ossie_metrics(output)[0].expression.dialects[0].expression == (
+            "SUM(COALESCE(DATEDIFF(day, orders.opened, orders.closed), 0))"
+        )
+
+    def test_compound_metric_input_preserves_quoted_columns(self) -> None:
+        orders = semantic_model_with_guaranteed_meta(
+            name="orders", dimensions=[_dimension("amount_paid", expr='"Amount Paid"')]
+        )
+        metric = _metric_with_agg("paid", AggregationType.SUM, 'COALESCE("Amount Paid", 0)', "orders")
+        output = MSIToOssieConverter().convert(_manifest([orders], [metric])).output
+
+        assert _ossie_metrics(output)[0].expression.dialects[0].expression == "SUM(COALESCE(orders.amount_paid, 0))"
+
+    def test_compound_qualification_preserves_native_function_spelling(self) -> None:
+        orders = semantic_model_with_guaranteed_meta(name="orders")
+        metric = _metric_with_agg("amount_or_zero", AggregationType.SUM, "NVL(amount, 0)", "orders")
+        output = MSIToOssieConverter().convert(_manifest([orders], [metric])).output
+
+        assert _ossie_metrics(output)[0].expression.dialects[0].expression == "SUM(NVL(orders.amount, 0))"
+
+    def test_metric_input_outside_the_owning_dataset_is_reported(self) -> None:
+        orders = semantic_model_with_guaranteed_meta(name="orders")
+        metric = _metric_with_agg("total", AggregationType.SUM, "other.amount", "orders")
+        result = MSIToOssieConverter().convert(_manifest([orders], [metric]))
+
+        assert result.output.metrics is None
+        assert result.output.datasets[0].fields is None
+        assert result.issues[0].issue_type is ConverterIssueType.METRIC_INPUT_DROPPED
+        assert result.issues[0].element_name == "total"
+
     @pytest.mark.parametrize("agg", [AggregationType.COUNT, AggregationType.SUM])
     def test_a_row_count_always_comes_back_as_portable_sum_1(self, agg: AggregationType) -> None:
         """A COUNT/expr=1 metric comes back as SUM(1), like a SUM/expr=1 one.
@@ -824,10 +863,12 @@ class TestMetricConversion:
         customers = semantic_model_with_guaranteed_meta(name="customers")
         orders = semantic_model_with_guaranteed_meta(name="orders")
         metric = _metric_with_agg("m", AggregationType.SUM, "CASE WHEN status = 'paid THEN amount END", "orders")
-        result = MSIToOssieConverter().convert(_manifest(semantic_models=[customers, orders], metrics=[metric]))
+        valid = _metric_with_agg("revenue", AggregationType.SUM, "amount", "orders")
+        result = MSIToOssieConverter().convert(_manifest([customers, orders], [metric, valid]))
 
-        assert [m.name for m in _ossie_metrics(result.output)] == ["m"]
-        assert result.issues == []
+        assert [m.name for m in _ossie_metrics(result.output)] == ["revenue"]
+        assert result.issues[0].issue_type is ConverterIssueType.METRIC_INPUT_DROPPED
+        assert result.issues[0].element_name == "m"
 
     def test_column_metric_with_several_semantic_models_loses_nothing(self) -> None:
         customers = semantic_model_with_guaranteed_meta(name="customers")

@@ -132,6 +132,7 @@ class _RelationshipDirection:
 @dataclass
 class _MetricContext:
     datasets: Dict[str, OssieDataset]
+    fields: Dict[str, List[OssieField]]
     metrics: Dict[str, Metric]
     cache: Dict[Tuple[str, Optional[str]], str]
 
@@ -173,6 +174,7 @@ class MSIToOssieConverter:
 
         metric_context = _MetricContext(
             datasets={dataset.name: dataset for dataset in datasets},
+            fields={dataset.name: list(dataset.fields or []) for dataset in datasets},
             metrics={metric.name: metric for metric in manifest.metrics},
             cache={},
         )
@@ -250,7 +252,12 @@ class MSIToOssieConverter:
             output=OssieDocument(
                 version="0.3.0.dev0",
                 name=ossie_model_name,
-                datasets=datasets,
+                datasets=[
+                    dataset.model_copy(update={"fields": metric_context.fields[dataset.name]})
+                    if len(metric_context.fields[dataset.name]) > len(dataset.fields or [])
+                    else dataset
+                    for dataset in datasets
+                ],
                 relationships=relationships if relationships else None,
                 metrics=ossie_metrics if ossie_metrics else None,
             ),
@@ -433,7 +440,7 @@ class MSIToOssieConverter:
         col = metric.type_params.expr if metric.type_params.expr is not None else metric.name
         dataset = context.datasets[agg_params_obj.semantic_model]
         measure = metric.type_params.measure
-        col = self._qualify_col(col, dataset, measure.name if measure else None)
+        col = self._qualify_col(col, dataset, context.fields[dataset.name], measure.name if measure else None)
         return self._build_agg_expression(agg_params_obj.agg, col, agg_params_obj.agg_params, filter_sql)
 
     @staticmethod
@@ -450,9 +457,9 @@ class MSIToOssieConverter:
         return params.agg is AggregationType.SUM and _is_constant_expr(expr)
 
     @staticmethod
-    def _matching_field(dataset: OssieDataset, source_sql: str, preferred_name: Optional[str]) -> Optional[str]:
+    def _matching_field(fields: Sequence[OssieField], source_sql: str, preferred_name: Optional[str]) -> Optional[str]:
         matches: List[str] = []
-        for field in dataset.fields or []:
+        for field in fields:
             expression = field.expression
             field_sql = expression.sql if expression.sql is not None else expression.dialects[0].expression
             if field_sql == source_sql:
@@ -463,17 +470,37 @@ class MSIToOssieConverter:
             return source_sql
         return matches[0] if matches else None
 
-    def _qualify_col(self, col: str, dataset: OssieDataset, preferred_name: Optional[str]) -> str:
+    def _field_for_source(
+        self, fields: List[OssieField], source_sql: str, source_name: str, preferred_name: Optional[str] = None
+    ) -> str:
+        existing = self._matching_field(fields, source_sql, preferred_name)
+        if existing is not None:
+            return existing
+
+        names = {field.name.casefold() for field in fields}
+        name = source_name
+        if name.casefold() in names:
+            name = f"{source_name}_input"
+            suffix = 2
+            while name.casefold() in names:
+                name = f"{source_name}_input_{suffix}"
+                suffix += 1
+        fields.append(OssieField(name=name, expression=self._make_expression(source_sql)))
+        return name
+
+    def _qualify_col(
+        self, col: str, dataset: OssieDataset, fields: List[OssieField], preferred_name: Optional[str]
+    ) -> str:
         """Qualify col with semantic_model if it is an unqualified identifier or a COUNT-converted expr."""
         # Quoted identifiers (e.g. "my col", `my col`) are not handled — qualifying
         # them correctly requires dialect-aware parsing and is deferred as a follow-up.
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", col):
-            field = self._matching_field(dataset, col, preferred_name) or col
+            field = self._field_for_source(fields, col, col, preferred_name)
             return f"{dataset.name}.{field}"
         m = ConvertCountMetricToSumRule.COUNT_CONVERSION_RE.match(col)
         if m:
             source_col = m.group(1)
-            field = self._matching_field(dataset, source_col, None) or source_col
+            field = self._field_for_source(fields, source_col, source_col)
             return f"CASE WHEN {dataset.name}.{field} IS NOT NULL THEN 1 ELSE 0 END"
         return col
 

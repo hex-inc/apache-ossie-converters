@@ -1636,7 +1636,8 @@ class TestOssieToMSIRoundTrip:
             backward = MSIToOssieConverter().convert(forward.output)
             assert backward.issues == []
             assert [m.name for m in backward.output.metrics or []] == ["avg_order_value"]
-            expression = backward.output.metrics[0].expression.dialects[0].expression
+            output_expression = backward.output.metrics[0].expression
+            expression = output_expression.sql or output_expression.dialects[0].expression
             if canonical_expression is not None:
                 assert expression == canonical_expression
             canonical_expression = expression
@@ -1687,6 +1688,28 @@ class TestOssieToMSIRoundTrip:
         assert backward.issues == []
         assert [m.name for m in backward.output.metrics or []] == ["nested_avg"]
 
+    def test_metric_field_alias_round_trips_to_its_source_expression(self) -> None:
+        orders = semantic_model_with_guaranteed_meta(
+            name="orders",
+            measures=[_measure("distinct_names", AggregationType.COUNT_DISTINCT, expr="customer_full_name")],
+        )
+        original = _manifest([orders], [_simple_metric("unique_customer_names", "distinct_names")])
+        exported = MSIToOssieConverter().convert(original).output
+        result = OssieToMSIConverter().convert(exported)
+
+        assert result.issues == []
+        assert result.output.metrics[0].type_params.expr == "customer_full_name"
+
+    def test_compound_field_expression_expands_with_correct_precedence(self) -> None:
+        original = _ossie_doc(
+            datasets=[_ossie_dataset("orders", fields=[_ossie_field("net", "gross - tax")])],
+            metrics=[_ossie_metric("doubled_net", "SUM(2 * orders.net)")],
+        )
+        result = OssieToMSIConverter().convert(original)
+
+        assert result.issues == []
+        assert result.output.metrics[0].type_params.expr == "2 * (gross - tax)"
+
     def test_sum_over_case_round_trip_does_not_double_aggregate(self) -> None:
         expression = "SUM(CASE WHEN orders.status = 'paid' THEN amount ELSE 0 END)"
         original = _ossie_doc(
@@ -1711,8 +1734,8 @@ class TestOssieToMSIRoundTrip:
 
         assert backward.issues == []
         assert (
-            backward.output.metrics[0].expression.dialects[0].expression
-            == "SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END)"
+            backward.output.metrics[0].expression.sql
+            == "SUM(CASE WHEN orders.status = 'paid' THEN orders.amount ELSE 0 END)"
         )
 
     def test_ossie_to_msi_to_ossie_preserves_structure(self, snapshot: SnapshotAssertion) -> None:
@@ -1751,7 +1774,7 @@ class TestOssieToMSIRoundTrip:
         metrics = ossie_doc.metrics or []
         assert len(metrics) == 1
         assert metrics[0].name == "revenue"
-        assert metrics[0].expression.dialects[0].expression == "SUM(orders.amount)"
+        assert metrics[0].expression.sql == "SUM(orders.amount)"
         assert ossie_doc.to_ossie_yaml() == snapshot
 
     def test_count_star_round_trips_to_a_portable_sum_one(self) -> None:
@@ -1784,7 +1807,7 @@ class TestOssieToMSIRoundTrip:
         msi = OssieToMSIConverter().convert(original).output
         ossie_doc = MSIToOssieConverter().convert(msi).output
 
-        expressions = {m.name: m.expression.dialects[0].expression for m in ossie_doc.metrics or []}
+        expressions = {m.name: m.expression.sql for m in ossie_doc.metrics or []}
         assert set(expressions) == {"order_count", "avg_order_value", "avg_order_value_numerator", "avg_order_value_denominator"}
         assert expressions["order_count"] == "SUM(1)"
         assert "SUM(1)" in expressions["avg_order_value"]
@@ -1865,7 +1888,7 @@ class TestOssieToMSIRoundTrip:
             _manifest(semantic_models=[orders], metrics=[metric])
         ).output
 
-        ossie_expr = ossie_doc.metrics[0].expression.dialects[0].expression
+        ossie_expr = ossie_doc.metrics[0].expression.sql
         assert ossie_expr == "PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY orders.amount)"
 
         back = OssieToMSIConverter().convert(ossie_doc).output
@@ -1890,10 +1913,8 @@ class TestOssieToMSIRoundTrip:
         ossie_doc = MSIToOssieConverter().convert(msi).output
 
         metrics = ossie_doc.metrics or []
-        expressions = {m.name: m.expression.dialects[0].expression for m in metrics}
-        # msi_to_ossie._qualify_col re-qualifies only bare identifiers,
-        # so the exported argument comes back unqualified.
+        expressions = {m.name: m.expression.sql for m in metrics}
         assert expressions == {
-            "net_sales": "SUM(gross - tax)",
-            "tax_or_zero": "SUM(COALESCE(tax, 0))",
+            "net_sales": "SUM(orders.gross - orders.tax)",
+            "tax_or_zero": "SUM(COALESCE(orders.tax, 0))",
         }
